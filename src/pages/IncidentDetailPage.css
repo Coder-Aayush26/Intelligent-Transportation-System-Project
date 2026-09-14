@@ -1,0 +1,31 @@
+/* ── Back link ────────────────────────────────────────────────── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 20px;
+  padding: 4px 0;
+  transition: color 0.2s, transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.back-link:hover {
+  color: var(--neon);
+  transform: translateX(-3px);
+}
+
+/* ── Detail grid ──────────────────────────────────────────────── */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  animation: fadeUp 0.5s ease;
+}
+
+@media (max-width: 1000px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}

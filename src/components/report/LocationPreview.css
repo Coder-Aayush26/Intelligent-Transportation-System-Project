@@ -1,0 +1,57 @@
+/* ── Location Preview ─────────────────────────────────────────── */
+.mini-map-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.mini-map {
+  height: 140px;
+  background: #0a0f1c;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Simple dark grid for mini-map */
+.mini-map::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56,189,248,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,0.05) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.mini-pin {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(248,113,113,0.2);
+  border: 2px solid var(--neon-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  animation: floatY 3s ease-in-out infinite;
+  box-shadow: var(--glow-red);
+}
+
+.mini-info {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.mini-info span { color: var(--text-soft); font-weight: 500; }

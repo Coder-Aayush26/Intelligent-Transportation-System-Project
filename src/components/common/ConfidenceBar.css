@@ -1,0 +1,25 @@
+/* ── Confidence Bar ───────────────────────────────────────────── */
+.confidence-wrap.indent {
+  padding-left: 42px;
+}
+
+.confidence-track {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.confidence-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.16,1,0.3,1);
+  box-shadow: 0 0 8px currentColor;
+}
+
+.confidence-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+}

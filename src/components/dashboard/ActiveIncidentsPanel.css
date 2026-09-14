@@ -1,0 +1,9 @@
+/* side-col base overrides (base is in theme.css) */
+.side-col h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}

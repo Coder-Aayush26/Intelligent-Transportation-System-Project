@@ -1,0 +1,5 @@
+/* ── Profile Page ─────────────────────────────────────────────── */
+.profile-page {
+  max-width: 820px;
+  animation: fadeUp 0.5s ease;
+}

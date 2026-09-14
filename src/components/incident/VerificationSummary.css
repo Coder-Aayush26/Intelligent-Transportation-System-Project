@@ -1,0 +1,25 @@
+/* ── Verification Summary ─────────────────────────────────────── */
+.verif-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.verif-row:last-child { border-bottom: none; }
+
+.check-ok {
+  color: var(--neon-green);
+  font-size: 16px;
+  filter: drop-shadow(0 0 6px rgba(74,222,128,0.5));
+}
+
+.check-warn {
+  color: var(--neon-orange);
+  font-size: 16px;
+}
+
+.verif-label { color: var(--text-soft); flex: 1; }
+.verif-val { font-weight: 700; color: var(--text); }
