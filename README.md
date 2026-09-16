@@ -54,6 +54,10 @@ environment variable with your Vercel URL, for example
 Report submissions are sent to the Render backend. Dashboard, profile, and
 incident pages fall back to mock data if the API is temporarily unavailable.
 
+The repository pins Render to Python 3.12 in `runtime.txt`. This is
+intentional: the pinned Pydantic dependencies use prebuilt Python 3.12 wheels,
+while Python 3.14 can trigger a Rust source build during Render deployment.
+
 ## Project structure
 
 ```
