@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Thin fetch wrapper.
  * All API modules import this so error handling lives in one place.
  *

@@ -58,6 +58,15 @@ app.include_router(users.router, prefix="/api")
 app.include_router(verifications.router, prefix="/api")
 
 
+@app.get("/")
+def read_root():
+    """Root endpoint to prevent 404 on base URL. Useful for Render health checks."""
+    return {
+        "message": "Welcome to the ITS API",
+        "docs_url": "/docs",
+        "health_check": "/api/health"
+    }
+
 @app.get("/api/health")
 def health():
     """Health check -- confirms the API is reachable."""
