@@ -16,15 +16,14 @@ export default function DashboardPage() {
       try {
         const [incData, statsData] = await Promise.all([fetchIncidents(), fetchStats()]);
         setIncidents(incData);
-        // Map backend stats shape to the array shape LiveMap/StatsRow expect
         setStats([
-          { value: statsData.totalActive,    label: 'Total Active Incidents', sub: 'Live updates' },
-          { value: statsData.highConfidence, label: 'High Confidence',        sub: '> 80% confidence' },
-          { value: statsData.reportsToday,   label: 'Reports Today',          sub: 'Submitted today' },
-          { value: statsData.verifiedToday,  label: 'Verified Today',         sub: '≥ 1 confirmation' },
+          { value: statsData.totalActive, label: 'Total Active Incidents', sub: 'Live updates' },
+          { value: statsData.highConfidence, label: 'High Confidence', sub: '> 80% confidence' },
+          { value: statsData.reportsToday, label: 'Reports Today', sub: 'Submitted today' },
+          { value: statsData.verifiedToday, label: 'Verified Today', sub: '≥ 1 confirmation' },
         ]);
       } catch {
-        // Backend not running — keep showing mock data, no error shown to user.
+        // Keep mock data visible when the Render API is unavailable.
       } finally {
         setLoading(false);
       }

@@ -12,7 +12,6 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchCurrentUser()
       .then((data) => {
-        // Map API response to the shape the components expect
         setUser({
           ...data,
           name: data.name,
@@ -26,7 +25,7 @@ export default function ProfilePage() {
         });
       })
       .catch(() => {
-        // Keep mock user if API unavailable
+        // Keep mock user visible when the Render API is unavailable.
       });
   }, []);
 

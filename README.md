@@ -23,6 +23,37 @@ npm run build    # production build to dist/
 npm run lint     # oxlint
 ```
 
+## Deploying the frontend to Vercel
+
+This repository contains a Vite single-page application. In Vercel, set the
+project's **Root Directory** to `Intelligent-Transportation-System-Project`
+(the directory containing `package.json`), then use the default Vite build
+settings:
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Install command: `npm install`
+
+The included `vercel.json` rewrites client-side routes such as
+`/app/dashboard` to `index.html`, so refreshing a nested route works in
+production.
+
+The frontend can use the mock data while the API is unavailable, but it is
+configured to use your separately deployed FastAPI backend on Render when
+`VITE_API_URL` is set. In Vercel, add:
+
+```text
+VITE_API_URL=https://your-api.onrender.com
+```
+
+Use the Render service URL without a trailing `/api`. The frontend appends
+`/api` to API requests. Configure the Render service's `FRONTEND_URL`
+environment variable with your Vercel URL, for example
+`https://your-app.vercel.app`, so CORS allows browser requests.
+
+Report submissions are sent to the Render backend. Dashboard, profile, and
+incident pages fall back to mock data if the API is temporarily unavailable.
+
 ## Project structure
 
 ```

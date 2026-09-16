@@ -7,27 +7,29 @@ The Vite dev server (npm run dev) proxies /api/* to this backend,
 so the React app needs no URL config changes between dev and prod.
 """
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from .database import engine
-from .models import Base
+from . import database
+from .database import MONGO_URI
 from .routers import incidents, users, verifications
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Startup: create tables and seed DB. Shutdown: nothing needed."""
-    Base.metadata.create_all(bind=engine)
-    from .database import SessionLocal
+    """Startup: connect to MongoDB and seed. Shutdown: close connection."""
+    database.client = AsyncIOMotorClient(MONGO_URI)
+    db = database.get_db()
+    
     from .seed import seed_db
-    db = SessionLocal()
-    try:
-        seed_db(db)
-    finally:
-        db.close()
+    await seed_db(db)
+    
     yield  # application runs here
+    
+    database.client.close()
 
 
 app = FastAPI(
@@ -44,6 +46,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5173",
+        *filter(None, [os.getenv("FRONTEND_URL")]),
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -59,4 +62,3 @@ app.include_router(verifications.router, prefix="/api")
 def health():
     """Health check -- confirms the API is reachable."""
     return {"status": "ok", "service": "ITS API"}
-

@@ -5,8 +5,8 @@ Field names use camelCase aliases so JSON responses match
 the existing mockData.js field names — no frontend changes needed.
 """
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------- Incident ----------
@@ -26,7 +26,7 @@ class IncidentCreate(BaseModel):
 class IncidentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    id: str
+    id: str = Field(alias="_id")  # In Mongo, we'll store custom 'id' or map '_id' -> id. For now we use custom string 'id'
     category: str
     location: str
     fullLocation: str = ""
@@ -47,29 +47,32 @@ class IncidentOut(BaseModel):
     mapPosition: dict = {}
 
     @classmethod
-    def from_orm_incident(cls, inc, verif_list):
-        confirmations = sum(1 for v in verif_list if v.verdict == "confirm")
-        contradictions = sum(1 for v in verif_list if v.verdict == "contradict")
+    def from_mongo_doc(cls, inc: dict, verif_list: list[dict]):
+        confirmations = sum(1 for v in verif_list if v.get("verdict") == "confirm")
+        contradictions = sum(1 for v in verif_list if v.get("verdict") == "contradict")
+        
+        reported_at_full = inc.get("reported_at_full")
+        
         return cls(
-            id=inc.id,
-            category=inc.category,
-            location=inc.location,
-            fullLocation=inc.full_location,
-            coords={"lat": inc.lat, "lng": inc.lng},
-            reportedAt=_relative_time(inc.reported_at_full),
-            reportedTimeFull=_format_dt(inc.reported_at_full),
-            severity=inc.severity,
-            confidence=inc.confidence,
-            reporter=inc.reporter,
-            description=inc.description or "",
-            source=inc.source,
-            mediaCount=inc.media_count,
+            _id=inc.get("id"), # Map custom 'id' field
+            category=inc.get("category", "Unknown"),
+            location=inc.get("location", ""),
+            fullLocation=inc.get("full_location", ""),
+            coords={"lat": inc.get("lat", 0.0), "lng": inc.get("lng", 0.0)},
+            reportedAt=_relative_time(reported_at_full),
+            reportedTimeFull=_format_dt(reported_at_full),
+            severity=inc.get("severity", "Medium"),
+            confidence=inc.get("confidence", 50),
+            reporter=inc.get("reporter", "Anonymous"),
+            description=inc.get("description", ""),
+            source=inc.get("source", "Web App"),
+            mediaCount=inc.get("media_count", 0),
             verifications=len(verif_list),
-            aiAssessment=inc.ai_assessment,
+            aiAssessment=inc.get("ai_assessment"),
             nearbyVerifications=confirmations,
             contradictions=contradictions,
             avgReliability=4.0,
-            mapPosition={"top": inc.map_position_top, "left": inc.map_position_left},
+            mapPosition={"top": inc.get("map_position_top", "50%"), "left": inc.get("map_position_left", "50%")},
         )
 
 
@@ -82,7 +85,7 @@ class VerificationCreate(BaseModel):
 
 class VerificationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: str = Field(alias="_id")
     incident_id: str
     verdict: str
 

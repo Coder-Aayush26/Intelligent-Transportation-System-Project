@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { INCIDENT_CATEGORIES } from '../../data/mockData';
+import { apiFetch } from '../../api/client';
 import Button from '../common/Button';
 import './ReportForm.css';
 
@@ -21,15 +22,16 @@ export default function ReportForm() {
     setError('');
 
     try {
-      // POST to the FastAPI backend; falls back gracefully if not running yet.
-      const res = await fetch('/api/incidents', {
+      await apiFetch('/incidents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category, severity, description }),
       });
-      if (!res.ok) throw new Error(`Server responded with ${res.status}`);
-    } catch {
-      // Backend may not be running yet — still show success in demo mode.
+    } catch (submissionError) {
+      setError(submissionError instanceof Error
+        ? submissionError.message
+        : 'Unable to submit the report. Please try again.');
+      setSubmitting(false);
+      return;
     }
 
     setSuccess(true);

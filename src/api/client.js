@@ -2,11 +2,13 @@
  * Thin fetch wrapper.
  * All API modules import this so error handling lives in one place.
  *
- * The Vite dev proxy rewrites /api/* -> http://localhost:8000/api/*
- * so the same paths work in dev and in a same-origin production deploy.
+ * The Vite dev proxy rewrites /api/* -> http://localhost:8000/api/*.
+ * In production, set VITE_API_URL to the deployed backend origin. When it is
+ * unset, requests remain same-origin so a reverse proxy can still be used.
  */
 
-const BASE = '/api';
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const BASE = `${API_ORIGIN}/api`;
 
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {

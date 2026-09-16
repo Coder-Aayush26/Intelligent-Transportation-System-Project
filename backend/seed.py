@@ -2,13 +2,10 @@
 lives in src/data/mockData.js so the frontend shows real data immediately.
 
 Called automatically by main.py on startup if the DB is empty.
-Run directly:  python -m backend.seed
 """
 from datetime import datetime, timedelta
-
-from .database import SessionLocal, engine
-from .models import Base, Incident, User, Verification
-
+import uuid
+import asyncio
 
 SEED_INCIDENTS = [
     {
@@ -27,6 +24,7 @@ SEED_INCIDENTS = [
         "ai_assessment": "Likely Real",
         "map_position_top": "22%",
         "map_position_left": "26%",
+        "is_active": 1,
         "minutes_ago": 2,
         "confirmations": 5,
         "contradictions": 0,
@@ -47,6 +45,7 @@ SEED_INCIDENTS = [
         "ai_assessment": "Likely Real",
         "map_position_top": "52%",
         "map_position_left": "44%",
+        "is_active": 1,
         "minutes_ago": 10,
         "confirmations": 3,
         "contradictions": 0,
@@ -67,6 +66,7 @@ SEED_INCIDENTS = [
         "ai_assessment": "Probable",
         "map_position_top": "42%",
         "map_position_left": "12%",
+        "is_active": 1,
         "minutes_ago": 15,
         "confirmations": 2,
         "contradictions": 1,
@@ -84,39 +84,45 @@ SEED_USER = {
 }
 
 
-def seed_db(db):
-    """Insert seed data only if tables are empty."""
-    if db.query(User).count() == 0:
-        user = User(**SEED_USER)
-        db.add(user)
-        db.commit()
+async def seed_db(db):
+    """Insert seed data only if collections are empty."""
+    user_count = await db.users.count_documents({})
+    if user_count == 0:
+        await db.users.insert_one(SEED_USER)
 
-    if db.query(Incident).count() == 0:
+    inc_count = await db.incidents.count_documents({})
+    if inc_count == 0:
         now = datetime.utcnow()
         for data in SEED_INCIDENTS:
             verif_c = data.pop("confirmations", 0)
             verif_x = data.pop("contradictions", 0)
             mins = data.pop("minutes_ago", 0)
-            inc = Incident(
-                **data,
-                is_active=1,
-                reported_at_full=now - timedelta(minutes=mins),
-            )
-            db.add(inc)
-            db.flush()  # ensure inc.id is available before adding verifications
+            
+            data["reported_at_full"] = now - timedelta(minutes=mins)
+            
+            await db.incidents.insert_one(data)
 
+            verifications = []
             for _ in range(verif_c):
-                db.add(Verification(incident_id=inc.id, verdict="confirm"))
+                verifications.append({"_id": uuid.uuid4().hex, "incident_id": data["id"], "verdict": "confirm", "created_at": now})
             for _ in range(verif_x):
-                db.add(Verification(incident_id=inc.id, verdict="contradict"))
+                verifications.append({"_id": uuid.uuid4().hex, "incident_id": data["id"], "verdict": "contradict", "created_at": now})
+                
+            if verifications:
+                await db.verifications.insert_many(verifications)
 
-        db.commit()
-        print("[OK] Database seeded with sample incidents.")
+        print("[OK] MongoDB seeded with sample incidents.")
     else:
-        print("[INFO] Database already has data -- skipping seed.")
-
+        print("[INFO] MongoDB already has data -- skipping seed.")
 
 if __name__ == "__main__":
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        seed_db(db)
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from .database import MONGO_URI, MONGO_DB
+    
+    async def main():
+        client = AsyncIOMotorClient(MONGO_URI)
+        db = client[MONGO_DB]
+        await seed_db(db)
+        client.close()
+        
+    asyncio.run(main())

@@ -16,12 +16,9 @@ export default function IncidentDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await fetchIncident(id);
-        setIncident(data);
+        setIncident(await fetchIncident(id));
       } catch {
-        // Fall back to mock data if backend is unavailable
-        const found = mockIncidents.find((inc) => inc.id === id);
-        setIncident(found ?? null);
+        setIncident(mockIncidents.find((item) => item.id === id) ?? null);
       } finally {
         setLoading(false);
       }

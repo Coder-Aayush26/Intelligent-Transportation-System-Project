@@ -1,10 +1,7 @@
-/* ── Sidebar — Dark glass panel ─────────────────────────────── */
+/* ── Sidebar — dark panel (keeps contrast with light content) ── */
 .sidebar {
-  background: rgba(6,10,18,0.9);
-  border-right: 1px solid var(--border);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  color: var(--text-soft);
+  background: var(--navy);
+  color: #cbd5e1;
   padding: 20px 12px;
   display: flex;
   flex-direction: column;
@@ -12,128 +9,74 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  transition: width 0.3s ease;
+  border-right: 1px solid rgba(255,255,255,0.06);
 }
 
-/* ── Logo ─────────────────────────────────────────────────────── */
 .sb-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 4px 6px 28px;
 }
 
 .sb-logo {
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--neon);
+  width: 36px; height: 36px;
+  border: 1.5px solid rgba(99,102,241,0.6);
   border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 11px;
-  color: var(--neon);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 11px; color: #a5b4fc;
   letter-spacing: 0.05em;
-  box-shadow: var(--glow-blue);
   animation: glowPulse 3s ease-in-out infinite;
 }
 
 .sb-menu {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  background: none; border: none; color: #64748b;
+  font-size: 16px; cursor: pointer; padding: 4px; border-radius: 6px;
   transition: color 0.2s, background 0.2s;
 }
+.sb-menu:hover { color: #cbd5e1; background: rgba(255,255,255,0.06); }
 
-.sb-menu:hover { color: var(--text); background: var(--navy-2); }
-
-/* ── Nav Items ─────────────────────────────────────────────────── */
+/* ── Nav Items ───────────────────────────────────────────────── */
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
   border-radius: 10px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-bottom: 2px;
-  color: var(--muted);
-  transition: color 0.2s ease,
-              background 0.2s ease,
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; margin-bottom: 2px;
+  color: #94a3b8;
+  transition: color 0.2s, background 0.2s,
               transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
   position: relative;
 }
+.nav-item:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; transform: translateX(2px); }
 
-.nav-item:hover {
-  background: var(--navy-2);
-  color: var(--text);
-  transform: translateX(2px);
-}
-
-.nav-item.active {
-  background: var(--navy-active);
-  color: var(--neon);
-  font-weight: 600;
-}
-
-/* Left glow bar on active */
+.nav-item.active { background: var(--navy-active); color: #a5b4fc; font-weight: 600; }
 .nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  background: var(--neon);
-  border-radius: 0 3px 3px 0;
-  box-shadow: 0 0 12px var(--neon);
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 60%;
+  background: #6366f1; border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 8px #6366f1;
 }
 
-.nav-item .ic {
-  width: 18px;
-  text-align: center;
-  font-size: 14px;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
+.nav-item .ic { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; transition: transform 0.2s; }
+.nav-item:hover .ic { transform: scale(1.15); }
 
-.nav-item:hover .ic {
-  transform: scale(1.15);
-}
+/* Stagger entrance */
+nav .nav-item:nth-child(1) { animation: slideInLeft 0.4s ease 0.05s both; }
+nav .nav-item:nth-child(2) { animation: slideInLeft 0.4s ease 0.10s both; }
+nav .nav-item:nth-child(3) { animation: slideInLeft 0.4s ease 0.15s both; }
+nav .nav-item:nth-child(4) { animation: slideInLeft 0.4s ease 0.20s both; }
+nav .nav-item:nth-child(5) { animation: slideInLeft 0.4s ease 0.25s both; }
+nav .nav-item:nth-child(6) { animation: slideInLeft 0.4s ease 0.30s both; }
+nav .nav-item:nth-child(7) { animation: slideInLeft 0.4s ease 0.35s both; }
+nav .nav-item:nth-child(8) { animation: slideInLeft 0.4s ease 0.40s both; }
+nav .nav-item:nth-child(9) { animation: slideInLeft 0.4s ease 0.45s both; }
 
-/* Stagger entrance animation */
-nav .nav-item:nth-child(1)  { animation: slideInLeft 0.4s ease 0.05s both; }
-nav .nav-item:nth-child(2)  { animation: slideInLeft 0.4s ease 0.10s both; }
-nav .nav-item:nth-child(3)  { animation: slideInLeft 0.4s ease 0.15s both; }
-nav .nav-item:nth-child(4)  { animation: slideInLeft 0.4s ease 0.20s both; }
-nav .nav-item:nth-child(5)  { animation: slideInLeft 0.4s ease 0.25s both; }
-nav .nav-item:nth-child(6)  { animation: slideInLeft 0.4s ease 0.30s both; }
-nav .nav-item:nth-child(7)  { animation: slideInLeft 0.4s ease 0.35s both; }
-nav .nav-item:nth-child(8)  { animation: slideInLeft 0.4s ease 0.40s both; }
-nav .nav-item:nth-child(9)  { animation: slideInLeft 0.4s ease 0.45s both; }
-
-/* ── Notification badge ───────────────────────────────────────── */
 .nav-badge {
   margin-left: auto;
-  background: var(--neon-red);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 20px;
-  padding: 2px 7px;
-  box-shadow: 0 0 8px rgba(248,113,113,0.5);
+  background: #ef4444; color: #fff;
+  font-size: 10px; font-weight: 700; border-radius: 20px; padding: 2px 7px;
 }
 
-/* ── Footer ───────────────────────────────────────────────────── */
 .sidebar-foot {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: auto; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.07);
 }

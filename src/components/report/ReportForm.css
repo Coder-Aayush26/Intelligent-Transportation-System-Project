@@ -1,110 +1,54 @@
-/* ── Form card ────────────────────────────────────────────────── */
+/* ── Report Form — clean light fields ───────────────────────── */
 .form-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 28px;
-  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-card);
 }
 
-/* ── Field ────────────────────────────────────────────────────── */
-.field {
-  margin-bottom: 20px;
-}
+.field { margin-bottom: 20px; }
 
 .field label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-soft);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  display: block; font-size: 11.5px; font-weight: 700;
+  color: var(--muted); margin-bottom: 7px;
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
 
 .field select,
 .field textarea,
 .field input[type="text"] {
   width: 100%;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 11px 14px;
-  font-size: 13px;
-  color: var(--text);
-  font-family: inherit;
+  font-size: 13px; color: var(--text); font-family: inherit;
   outline: none;
-  transition: border-color 0.25s, box-shadow 0.25s;
-  appearance: none;
-  -webkit-appearance: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-
 .field select:focus,
 .field textarea:focus,
 .field input[type="text"]:focus {
-  border-color: var(--border-glow);
-  box-shadow: 0 0 0 3px rgba(56,189,248,0.08);
+  border-color: var(--neon);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  background: var(--card);
 }
+.field textarea { resize: vertical; min-height: 110px; line-height: 1.6; }
 
-.field textarea {
-  resize: vertical;
-  min-height: 110px;
-  line-height: 1.6;
-}
+.req { color: var(--red); margin-left: 2px; }
+.help-text { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-.field select option {
-  background: #0d1220;
-  color: var(--text);
-}
-
-/* ── Required marker ──────────────────────────────────────────── */
-.req {
-  color: var(--neon-red);
-  margin-left: 2px;
-}
-
-/* ── Help text ────────────────────────────────────────────────── */
-.help-text {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 6px;
-}
-
-/* ── Upload box ───────────────────────────────────────────────── */
 .upload-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1.5px dashed rgba(255,255,255,0.12);
-  border-radius: 12px;
-  padding: 30px 20px;
-  cursor: pointer;
-  text-align: center;
-  transition: border-color 0.25s, background 0.25s;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; border: 1.5px dashed var(--border); border-radius: 12px;
+  padding: 30px 20px; cursor: pointer; text-align: center;
+  transition: border-color 0.2s, background 0.2s;
 }
-
-.upload-box:hover {
-  border-color: rgba(56,189,248,0.4);
-  background: rgba(56,189,248,0.04);
-}
-
+.upload-box:hover { border-color: var(--neon); background: var(--blue-light); }
 .upload-box .ic { font-size: 24px; }
 .upload-box .t  { font-size: 12.5px; color: var(--text-soft); font-weight: 500; }
 .upload-box .s  { font-size: 11px; color: var(--muted); }
 
-/* ── Form actions ─────────────────────────────────────────────── */
-.form-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-
-/* ── Side note card ───────────────────────────────────────────── */
-.note-card {
-  background: rgba(56,189,248,0.04);
-  border-color: rgba(56,189,248,0.15);
-}
+.form-actions { display: flex; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.note-card { background: var(--blue-light); border-color: rgba(37,99,235,0.2); }

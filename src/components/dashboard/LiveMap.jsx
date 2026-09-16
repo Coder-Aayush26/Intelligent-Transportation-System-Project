@@ -9,10 +9,10 @@ export default function LiveMap({ incidents = [], loading = false }) {
     <div className="map-card">
       <div className="map-canvas">
         <svg width="100%" height="100%" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          {/* Deep-space base */}
-          <rect width="800" height="440" fill="#08101e" />
+          {/* Light map base */}
+          <rect width="800" height="440" fill="#eef3ff" />
           {/* City blocks */}
-          <g fill="#0d1525" stroke="rgba(56,189,248,0.06)" strokeWidth="1">
+          <g fill="#dce6f5" stroke="#c8d8ef" strokeWidth="1">
             <rect x="40"  y="30"  width="120" height="90" rx="4"/>
             <rect x="200" y="60"  width="90"  height="70" rx="4"/>
             <rect x="520" y="40"  width="110" height="80" rx="4"/>
@@ -21,14 +21,14 @@ export default function LiveMap({ incidents = [], loading = false }) {
             <rect x="600" y="270" width="130" height="110" rx="4"/>
             <rect x="300" y="290" width="100" height="90"  rx="4"/>
           </g>
-          {/* Main roads — neon glow lines */}
-          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="rgba(56,189,248,0.12)" strokeWidth="20" fill="none" strokeLinecap="round"/>
-          <path d="M120,0 C170,120 90,260 150,440"  stroke="rgba(56,189,248,0.12)" strokeWidth="18" fill="none" strokeLinecap="round"/>
-          <path d="M560,0 C520,140 610,260 560,440" stroke="rgba(56,189,248,0.10)" strokeWidth="16" fill="none" strokeLinecap="round"/>
-          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="rgba(56,189,248,0.10)" strokeWidth="18" fill="none" strokeLinecap="round"/>
+          {/* Roads — white with blue border */}
+          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="#fff" strokeWidth="22" fill="none" strokeLinecap="round"/>
+          <path d="M120,0 C170,120 90,260 150,440"  stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round"/>
+          <path d="M560,0 C520,140 610,260 560,440" stroke="#fff" strokeWidth="18" fill="none" strokeLinecap="round"/>
+          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round"/>
           {/* Road centre-lines */}
-          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="rgba(56,189,248,0.35)" strokeWidth="1" strokeDasharray="10 8" fill="none"/>
-          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="rgba(56,189,248,0.25)" strokeWidth="1" strokeDasharray="8 6" fill="none"/>
+          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="rgba(37,99,235,0.25)" strokeWidth="1" strokeDasharray="10 8" fill="none"/>
+          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="rgba(37,99,235,0.2)"  strokeWidth="1" strokeDasharray="8 6"  fill="none"/>
         </svg>
 
         {loading && (
