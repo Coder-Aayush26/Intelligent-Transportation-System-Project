@@ -52,7 +52,8 @@ async def create_incident(payload: IncidentCreate, db = Depends(get_db)):
         "description": payload.description,
         "reporter": payload.reporter,
         "source": payload.source,
-        "media_count": 0,
+        "media_urls": payload.media_urls,
+        "media_count": len(payload.media_urls),
         "ai_assessment": "Pending",
         "map_position_top": "50%",
         "map_position_left": "50%",
@@ -94,6 +95,47 @@ async def get_stats(db = Depends(get_db)):
         reportsToday=today_reports,
         verifiedToday=verified,
     )
+
+
+@router.get("/nearby", response_model=List[IncidentOut])
+async def get_nearby_incidents(lat: float, lng: float, radius: float = 5.0, db = Depends(get_db)):
+    """Return active incidents near the provided coordinates (rough bounding box)."""
+    # Simple rough bounding box filter: 1 deg lat/lng is roughly 111km.
+    # radius in km / 111 = radius in degrees
+    deg_radius = radius / 111.0
+    active_cursor = db.incidents.find({
+        "is_active": 1,
+        "lat": {"$gte": lat - deg_radius, "$lte": lat + deg_radius},
+        "lng": {"$gte": lng - deg_radius, "$lte": lng + deg_radius},
+    })
+    incidents = await active_cursor.to_list(length=100)
+    
+    result = []
+    for inc in incidents:
+        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+        verif = await verif_cursor.to_list(length=500)
+        inc["confidence"] = _confidence_from_verifications(verif)
+        result.append(IncidentOut.from_mongo_doc(inc, verif))
+    
+    return sorted(result, key=lambda x: x.confidence, reverse=True)
+
+
+@router.get("/notifications", response_model=List[IncidentOut])
+async def get_notifications(db = Depends(get_db)):
+    """Return high-priority active incidents for notifications (confidence >= 70)."""
+    active_cursor = db.incidents.find({"is_active": 1})
+    incidents = await active_cursor.to_list(length=200)
+    
+    result = []
+    for inc in incidents:
+        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+        verif = await verif_cursor.to_list(length=500)
+        conf = _confidence_from_verifications(verif)
+        if conf >= 70:
+            inc["confidence"] = conf
+            result.append(IncidentOut.from_mongo_doc(inc, verif))
+            
+    return sorted(result, key=lambda x: x.reportedTimeFull, reverse=True)
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)

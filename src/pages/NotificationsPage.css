@@ -1,0 +1,127 @@
+.notifications-page {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+.page-header p {
+  color: var(--text-light);
+  font-size: 15px;
+}
+
+.loading-state, .empty-state {
+  text-align: center;
+  padding: 48px;
+  background: white;
+  border-radius: 12px;
+  color: var(--text-light);
+  font-size: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+}
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notification-card {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 4px solid var(--border);
+}
+
+.notification-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  border-color: var(--blue);
+}
+
+.notification-card.severity-critical { border-left-color: var(--red); }
+.notification-card.severity-high { border-left-color: var(--orange); }
+.notification-card.severity-medium { border-left-color: var(--yellow); }
+.notification-card.severity-low { border-left-color: var(--green); }
+
+.notif-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.notif-content {
+  flex: 1;
+}
+
+.notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.notif-header h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.notif-time {
+  font-size: 13px;
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.notif-location {
+  font-size: 14px;
+  color: var(--text-light);
+  margin-bottom: 8px;
+}
+
+.notif-desc {
+  font-size: 15px;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.notif-meta {
+  display: flex;
+  gap: 12px;
+}
+
+.conf-badge, .verif-badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.conf-badge {
+  background: #ecfdf5;
+  color: #059669;
+}

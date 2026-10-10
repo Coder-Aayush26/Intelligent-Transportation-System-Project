@@ -21,12 +21,13 @@ class IncidentCreate(BaseModel):
     lng: float = 0.0
     reporter: str = "Anonymous"
     source: str = "Web App"
+    media_urls: List[str] = []
 
 
 class IncidentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    id: str = Field(alias="_id")  # In Mongo, we'll store custom 'id' or map '_id' -> id. For now we use custom string 'id'
+    id: str
     category: str
     location: str
     fullLocation: str = ""
@@ -39,6 +40,7 @@ class IncidentOut(BaseModel):
     description: Optional[str] = ""
     source: str
     mediaCount: int = 0
+    mediaUrls: List[str] = []
     verifications: int = 0
     aiAssessment: Optional[str] = None
     nearbyVerifications: int = 0
@@ -54,7 +56,7 @@ class IncidentOut(BaseModel):
         reported_at_full = inc.get("reported_at_full")
         
         return cls(
-            _id=inc.get("id"), # Map custom 'id' field
+            id=inc.get("id") or str(inc.get("_id", "")),
             category=inc.get("category", "Unknown"),
             location=inc.get("location", ""),
             fullLocation=inc.get("full_location", ""),
@@ -66,7 +68,8 @@ class IncidentOut(BaseModel):
             reporter=inc.get("reporter", "Anonymous"),
             description=inc.get("description", ""),
             source=inc.get("source", "Web App"),
-            mediaCount=inc.get("media_count", 0),
+            mediaCount=len(inc.get("media_urls", [])) or inc.get("media_count", 0),
+            mediaUrls=inc.get("media_urls", []),
             verifications=len(verif_list),
             aiAssessment=inc.get("ai_assessment"),
             nearbyVerifications=confirmations,
@@ -85,7 +88,7 @@ class VerificationCreate(BaseModel):
 
 class VerificationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: str = Field(alias="_id")
+    id: str
     incident_id: str
     verdict: str
 

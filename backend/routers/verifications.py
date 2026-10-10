@@ -34,7 +34,7 @@ async def verify_incident(
     
     await db.verifications.insert_one(v_doc)
     return VerificationOut(
-        _id=doc_id,
+        id=doc_id,
         incident_id=incident_id,
         verdict=payload.verdict
     )

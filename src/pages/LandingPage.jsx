@@ -187,10 +187,10 @@ export default function LandingPage() {
       {/* ── Stats Band ──────────────────────────────────────────── */}
       <section className="stats-band">
         {[
-          { val: 24,    suffix: '+',  label: 'Active Incidents Today' },
-          { val: 98,    suffix: '%',  label: 'AI Verification Accuracy' },
-          { val: 12400, suffix: '+',  label: 'Total Incidents Resolved' },
-          { val: 34,    suffix: 's',  label: 'Average Alert Latency' },
+          { val: 3,    suffix: '+',  label: 'Active Incidents Today' },
+          { val: 90,    suffix: '%',  label: 'AI Verification Accuracy' },
+          { val: 100, suffix: '+',  label: 'Total Incidents Resolved' },
+          { val: 37,    suffix: 's',  label: 'Average Alert Latency' },
         ].map((s, i) => (
           <div className={`stats-band-item reveal reveal-delay-${i + 1}`} key={s.label}>
             <span className="stats-band-val" data-count={s.val} data-suffix={s.suffix}>0{s.suffix}</span>

@@ -7,6 +7,9 @@ import IncidentDetailPage from './pages/IncidentDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import PlaceholderPage from './pages/PlaceholderPage';
 
+import NotificationsPage from './pages/NotificationsPage';
+import NearbyIncidentsPage from './pages/NearbyIncidentsPage';
+
 export default function App() {
   return (
     <Routes>
@@ -20,20 +23,14 @@ export default function App() {
         <Route path="report" element={<ReportIncidentPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="nearby" element={<NearbyIncidentsPage />} />
 
         {/* Sidebar items scoped for a future build-out — kept as real
             routes now so the nav's active state and links are correct. */}
         <Route
           path="reports"
           element={<PlaceholderPage title="My Reports" description="A history of incidents you've reported, with their current verification status." />}
-        />
-        <Route
-          path="nearby"
-          element={<PlaceholderPage title="Nearby Incidents" description="Incidents within your notification radius, ranked by proximity." />}
-        />
-        <Route
-          path="notifications"
-          element={<PlaceholderPage title="Notifications" description="Real-time alerts for high-confidence incidents near you." />}
         />
         <Route
           path="favorites"

@@ -1,0 +1,141 @@
+.nearby-page {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.page-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+.page-header p {
+  color: var(--text-light);
+  font-size: 15px;
+}
+
+.btn-refresh {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-main);
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.btn-refresh:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.error-state {
+  padding: 16px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.nearby-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.nearby-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.nearby-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+  border-color: var(--blue);
+}
+
+.nearby-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nearby-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.nearby-card-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.nearby-severity {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+.nearby-card-body {
+  padding: 16px;
+  flex: 1;
+}
+
+.nearby-loc {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+}
+
+.nearby-desc {
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.nearby-card-footer {
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.nearby-card-footer .conf {
+  color: var(--blue);
+}

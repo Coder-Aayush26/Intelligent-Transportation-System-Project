@@ -12,19 +12,90 @@ export default function ReportForm() {
   const [category, setCategory] = useState('');
   const [severity, setSeverity] = useState('');
   const [description, setDescription] = useState('');
+  const [file, setFile] = useState(null);
+  
+  // Geolocation state
+  const [locLat, setLocLat] = useState(0);
+  const [locLng, setLocLng] = useState(0);
+  const [locAddress, setLocAddress] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  const handleGetLocation = () => {
+    setIsLocating(true);
+    setError('');
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      setIsLocating(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setLocLat(latitude);
+        setLocLng(longitude);
+        try {
+          // Reverse geocoding via OpenStreetMap (free, no key required)
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          if (res.ok) {
+            const data = await res.json();
+            setLocAddress(data.display_name || 'Unknown Location');
+          } else {
+            setLocAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
+        } catch (e) {
+          setLocAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        }
+        setIsLocating(false);
+      },
+      (err) => {
+        setError('Unable to retrieve your location. Please check browser permissions.');
+        setIsLocating(false);
+      }
+    );
+  };
 
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setError('');
 
+    let uploadedUrls = [];
+
     try {
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'its_app_uploads'); // User's unsigned preset
+
+        const uploadRes = await fetch('https://api.cloudinary.com/v1_1/hb0sukix/auto/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error('Failed to upload media to Cloudinary');
+        }
+        
+        const uploadData = await uploadRes.json();
+        uploadedUrls.push(uploadData.secure_url);
+      }
+
       await apiFetch('/incidents', {
         method: 'POST',
-        body: JSON.stringify({ category, severity, description }),
+        body: JSON.stringify({ 
+          category, 
+          severity, 
+          description,
+          lat: locLat,
+          lng: locLng,
+          location: locAddress ? locAddress.split(',')[0] : 'Unknown',
+          full_location: locAddress || 'Unknown',
+          media_urls: uploadedUrls 
+        }),
       });
     } catch (submissionError) {
       setError(submissionError instanceof Error
@@ -109,18 +180,33 @@ export default function ReportForm() {
       </div>
 
       <div className="field">
-        <label>Location</label>
-        <Button type="button" variant="outline" size="sm">📍 Use My Current Location</Button>
+        <label>Location <span className="req">*</span></label>
+        {locAddress ? (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: 12, borderRadius: 8, fontSize: 14, color: '#166534', marginBottom: 8 }}>
+            <strong>📍 Location Acquired:</strong><br/>
+            {locAddress}
+          </div>
+        ) : (
+          <Button type="button" variant="outline" size="sm" onClick={handleGetLocation} disabled={isLocating}>
+            {isLocating ? '📍 Locating...' : '📍 Use My Current Location'}
+          </Button>
+        )}
         <div className="help-text">Location will be captured automatically from your device GPS</div>
       </div>
 
       <div className="field">
         <label htmlFor="media">Add Photo / Video (Optional)</label>
-        <label className="upload-box" htmlFor="media">
-          <div className="ic" aria-hidden="true">📷</div>
-          <div className="t">Click to upload or drag and drop</div>
-          <div className="s">Images / Videos up to 50 MB</div>
-          <input id="media" type="file" accept="image/*,video/*" hidden />
+        <label className="upload-box" htmlFor="media" style={{ borderColor: file ? 'var(--blue)' : 'var(--border)' }}>
+          <div className="ic" aria-hidden="true">{file ? '✅' : '📷'}</div>
+          <div className="t">{file ? file.name : 'Click to upload or drag and drop'}</div>
+          {!file && <div className="s">Images / Videos up to 50 MB</div>}
+          <input 
+            id="media" 
+            type="file" 
+            accept="image/*,video/*" 
+            hidden 
+            onChange={(e) => setFile(e.target.files[0])}
+          />
         </label>
       </div>
 

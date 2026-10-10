@@ -1,4 +1,4 @@
-﻿import { apiFetch } from './client';
+import { apiFetch } from './client';
 
 /** Fetch all active incidents from the backend. */
 export function fetchIncidents() {
@@ -29,4 +29,14 @@ export function verifyIncident(id, verdict) {
 /** Fetch dashboard stats. */
 export function fetchStats() {
   return apiFetch('/incidents/stats/summary');
+}
+
+/** Fetch nearby incidents based on user location. */
+export function fetchNearbyIncidents(lat, lng, radius = 5) {
+  return apiFetch(`/incidents/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+}
+
+/** Fetch high-priority notifications. */
+export function fetchNotifications() {
+  return apiFetch('/incidents/notifications');
 }

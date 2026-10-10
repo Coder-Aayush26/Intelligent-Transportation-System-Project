@@ -59,7 +59,7 @@ export default function IncidentDetailPage() {
           <IncidentHeader incident={incident} />
         </div>
         <div>
-          <MediaGallery count={incident.mediaCount} />
+          <MediaGallery count={incident.mediaCount} mediaUrls={incident.mediaUrls} />
           <VerificationSummary incident={incident} />
         </div>
       </div>
