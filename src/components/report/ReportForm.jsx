@@ -25,39 +25,15 @@ export default function ReportForm({ onLocationAcquired }) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // Attempt automatic geolocation on mount
+  // Initialise default preview on mount without blocking on GPS
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          setLocLat(latitude);
-          setLocLng(longitude);
-          let resolvedAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-            if (res.ok) {
-              const data = await res.json();
-              resolvedAddress = data.display_name || resolvedAddress;
-            }
-          } catch {
-            // fallback coords
-          }
-          setLocAddress(resolvedAddress);
-          onLocationAcquired?.({
-            lat: latitude,
-            lng: longitude,
-            address: resolvedAddress,
-            timestamp: new Date().toLocaleString(),
-          });
-        },
-        () => {
-          // If denied or unavailable, stay with default coords
-        },
-        { timeout: 5000 }
-      );
-    }
-  }, [onLocationAcquired]);
+    onLocationAcquired?.({
+      lat: locLat,
+      lng: locLng,
+      address: locAddress || 'Indore, Madhya Pradesh',
+      timestamp: new Date().toLocaleString(),
+    });
+  }, []);
 
   const handleGetLocation = () => {
     setIsLocating(true);

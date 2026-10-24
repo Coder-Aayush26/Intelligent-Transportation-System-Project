@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { fetchNearbyIncidents } from '../api/incidents';
 import { CATEGORY_STYLES } from '../data/mockData';
 import './NearbyIncidentsPage.css';
@@ -49,10 +48,34 @@ export default function NearbyIncidentsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [locating, setLocating] = useState(false);
-  const [userPos, setUserPos] = useState(null);
+  
+  // Use cached location or Indore default for instant 0ms mount
+  const [userPos, setUserPos] = useState(() => {
+    try {
+      const lat = parseFloat(sessionStorage.getItem('its_lat') || '');
+      const lng = parseFloat(sessionStorage.getItem('its_lng') || '');
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    } catch {
+      // fallback
+    }
+    return { lat: 22.7196, lng: 75.8577 };
+  });
+
   const navigate = useNavigate();
 
-  const handleFindNearby = () => {
+  const loadIncidents = useCallback(async (lat, lng) => {
+    setLoading(true);
+    try {
+      const data = await fetchNearbyIncidents(lat, lng, 10);
+      setIncidents(data || []);
+    } catch {
+      setError('Failed to fetch nearby incidents from the server.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleFindNearby = useCallback(() => {
     setLocating(true);
     setError('');
 
@@ -63,36 +86,55 @@ export default function NearbyIncidentsPage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude, longitude } = pos.coords;
         setUserPos({ lat: latitude, lng: longitude });
-        setLocating(false);
-        setLoading(true);
         try {
-          const data = await fetchNearbyIncidents(latitude, longitude, 10);
-          setIncidents(data);
-        } catch (err) {
-          setError('Failed to fetch nearby incidents from the server.');
-        } finally {
-          setLoading(false);
+          sessionStorage.setItem('its_lat', String(latitude));
+          sessionStorage.setItem('its_lng', String(longitude));
+        } catch {
+          // ignore
         }
+        setLocating(false);
+        loadIncidents(latitude, longitude);
       },
       () => {
-        setError('Unable to retrieve your location. Please check browser permissions.');
+        // If GPS is denied or unavailable, still load default position
         setLocating(false);
-      }
+        loadIncidents(userPos.lat, userPos.lng);
+      },
+      { timeout: 5000, maximumAge: 60000 }
     );
-  };
+  }, [loadIncidents, userPos.lat, userPos.lng]);
 
+  // Load incidents immediately on mount with initial position (instant render)
   useEffect(() => {
-    handleFindNearby();
+    loadIncidents(userPos.lat, userPos.lng);
+    // Background location check (non-blocking)
+    if (navigator.geolocation && !sessionStorage.getItem('its_lat')) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setUserPos({ lat: latitude, lng: longitude });
+          try {
+            sessionStorage.setItem('its_lat', String(latitude));
+            sessionStorage.setItem('its_lng', String(longitude));
+          } catch {
+            // ignore
+          }
+          loadIncidents(latitude, longitude);
+        },
+        () => {},
+        { timeout: 4000, maximumAge: 60000 }
+      );
+    }
   }, []);
 
   return (
     <div className="nearby-page">
       <div className="page-header">
         <h2>Nearby Incidents</h2>
-        <p>Active traffic disruptions within a 10 km radius of your current location.</p>
+        <p>Active traffic disruptions within a 10 km radius of your location.</p>
         <button
           className="btn-refresh"
           onClick={handleFindNearby}
@@ -107,7 +149,7 @@ export default function NearbyIncidentsPage() {
       {/* ── OSM Map ── */}
       <div className="nearby-map-wrap">
         <MapContainer
-          center={userPos ? [userPos.lat, userPos.lng] : [22.7196, 75.8577]}
+          center={[userPos.lat, userPos.lng]}
           zoom={13}
           style={{ width: '100%', height: '100%' }}
           zoomControl={true}
@@ -120,19 +162,15 @@ export default function NearbyIncidentsPage() {
 
           <FitBounds userPos={userPos} incidents={incidents} />
 
-          {/* User location */}
-          {userPos && (
-            <>
-              <Marker position={[userPos.lat, userPos.lng]} icon={USER_ICON}>
-                <Popup>📍 Your location</Popup>
-              </Marker>
-              <Circle
-                center={[userPos.lat, userPos.lng]}
-                radius={10000}
-                pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '6 4' }}
-              />
-            </>
-          )}
+          {/* User location marker + radius */}
+          <Marker position={[userPos.lat, userPos.lng]} icon={USER_ICON}>
+            <Popup>📍 Your location</Popup>
+          </Marker>
+          <Circle
+            center={[userPos.lat, userPos.lng]}
+            radius={10000}
+            pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '6 4' }}
+          />
 
           {/* Incident pins */}
           {incidents.map((inc) => {
@@ -165,9 +203,7 @@ export default function NearbyIncidentsPage() {
       </div>
 
       {/* ── Incident cards ── */}
-      {loading || locating ? (
-        <div className="loading-state">Scanning your area...</div>
-      ) : incidents.length === 0 && !error ? (
+      {incidents.length === 0 && !loading && !locating ? (
         <div className="empty-state">
           <h3>✅ All clear!</h3>
           <p>We couldn't find any active incidents within 10 km of your location.</p>

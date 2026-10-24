@@ -70,10 +70,29 @@ function useCounter() {
   }, []);
 }
 
+/* ── Scroll-reveal animation ─────────────────────────────────── */
+function useScrollReveal() {
+  useEffect(() => {
+    const REVEAL_SEL = '.reveal, .reveal-left, .reveal-right, .reveal-scale';
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('is-visible');
+          observer.unobserve(e.target);
+        }
+      }),
+      { threshold: 0.1 }
+    );
+    document.querySelectorAll(REVEAL_SEL).forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+}
+
 /* ─────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
   useParallax();
   useCounter();
+  useScrollReveal();
 
   return (
     <div className="landing">
