@@ -66,6 +66,23 @@ async def create_incident(
         "is_active": 1,
     }
 
+    # Update user stats: increment total_reports
+    await db.users.update_one({"_id": current_user.get("_id")}, {"$inc": {"total_reports": 1}})
+
+    # Compute confidence scores using the new engine
+    from ..services.confidence import compute_total_confidence
+    conf_result = await compute_total_confidence(
+        description=payload.description,
+        media_urls=payload.media_urls,
+        lat=payload.lat,
+        lng=payload.lng,
+        user_doc=current_user,
+        db=db,
+    )
+    inc_doc["confidence_score"] = conf_result["confidence_score"]
+    inc_doc["media_alignment_score"] = conf_result["media_alignment_score"]
+    # Keep legacy confidence field as integer approximation
+    inc_doc["confidence"] = int(conf_result["confidence_score"])
     await db.incidents.insert_one(inc_doc)
     return IncidentOut.from_mongo_doc(inc_doc, [])
 

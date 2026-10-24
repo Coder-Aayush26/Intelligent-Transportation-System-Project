@@ -33,6 +33,30 @@ async def verify_incident(
     }
     
     await db.verifications.insert_one(v_doc)
+    # Recompute incident confidence using the new scoring engine
+    from ..services.confidence import compute_total_confidence
+    inc = await db.incidents.find_one({"id": incident_id})
+    if inc:
+        # Determine user document for reliability factor (use verifier if provided)
+        user_doc = {}
+        if payload.user_id:
+            user_doc = await db.users.find_one({"_id": payload.user_id}) or {}
+        conf_result = await compute_total_confidence(
+            description=inc.get("description", ""),
+            media_urls=inc.get("media_urls", []),
+            lat=inc.get("lat", 0.0),
+            lng=inc.get("lng", 0.0),
+            user_doc=user_doc,
+            db=db,
+        )
+        await db.incidents.update_one(
+            {"id": incident_id},
+            {"$set": {
+                "confidence_score": conf_result["confidence_score"],
+                "media_alignment_score": conf_result["media_alignment_score"],
+                "confidence": int(conf_result["confidence_score"])},
+            },
+        )
     return VerificationOut(
         id=doc_id,
         incident_id=incident_id,

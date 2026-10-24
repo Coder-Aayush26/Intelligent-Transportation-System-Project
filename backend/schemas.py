@@ -36,6 +36,8 @@ class IncidentOut(BaseModel):
     reportedTimeFull: str = ""
     severity: str
     confidence: int
+    confidence_score: float = 0.0
+    media_alignment_score: float = 0.0
     reporter: str
     description: Optional[str] = ""
     source: str
@@ -106,6 +108,8 @@ class UserOut(BaseModel):
     reliabilityLabel: str = "Average"
     scoreFactors: list[str] = []
     recentActivity: list[dict] = []
+    total_reports: int = 0
+    verified_reports: int = 0
 
 
 # ---------- Stats ----------
