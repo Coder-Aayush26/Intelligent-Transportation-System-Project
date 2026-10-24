@@ -1,4 +1,4 @@
-"""Auth utilities — password hashing with native bcrypt and JWT creation/verification."""
+"""Auth utilities — password hashing with native bcrypt, JWT creation, and MongoDB session tracking."""
 import os
 from datetime import datetime, timedelta
 
@@ -47,22 +47,37 @@ def decode_token(token: str) -> dict:
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Invalid or expired session token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
-# ---------- FastAPI dependency ----------
+# ---------- FastAPI dependency with MongoDB Session verification ----------
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
     db = Depends(get_db),
 ):
-    """FastAPI dependency — returns the user document from MongoDB."""
+    """FastAPI dependency — validates JWT token and confirms active session in MongoDB."""
     payload = decode_token(credentials.credentials)
     user_id = payload.get("sub")
+    session_id = payload.get("session_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    # If session_id is present, verify active session in MongoDB
+    if session_id:
+        session = await db.sessions.find_one({"session_id": session_id, "is_active": True})
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your session has ended. Please log in again."
+            )
+        # Touch last_active
+        await db.sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"last_active": datetime.utcnow()}}
+        )
 
     user = await db.users.find_one({"_id": user_id})
     if not user:
@@ -74,7 +89,7 @@ async def get_current_user_optional(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
     db = Depends(get_db),
 ):
-    """Same as get_current_user but returns None if no token is supplied."""
+    """Returns the user document if token is valid, otherwise None."""
     if not credentials:
         return None
     try:

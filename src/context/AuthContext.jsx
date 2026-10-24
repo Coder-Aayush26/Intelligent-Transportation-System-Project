@@ -1,34 +1,60 @@
 /**
- * AuthContext — stores the JWT token and current user in memory + localStorage.
- * Provides login(), register(), logout() helpers to all children.
+ * AuthContext — manages user authentication and persistent sessions in MongoDB.
+ *
+ * Sessions remain active until the user logs out or the token expires.
+ * On app load, validates the active session with the backend so user state is restored.
  */
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api/client';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('its_token') || null);
-  const [user,  setUser]  = useState(() => {
+  const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('its_user') || 'null'); } catch { return null; }
   });
+  const [sessionLoading, setSessionLoading] = useState(true);
 
   const _persist = (tok, usr) => {
     setToken(tok);
     setUser(usr);
     if (tok) {
       localStorage.setItem('its_token', tok);
-      localStorage.setItem('its_user',  JSON.stringify(usr));
+      localStorage.setItem('its_user', JSON.stringify(usr));
     } else {
       localStorage.removeItem('its_token');
       localStorage.removeItem('its_user');
     }
   };
 
-  const login = useCallback(async (email, password) => {
+  // Validate active session on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('its_token');
+    if (!storedToken) {
+      setSessionLoading(false);
+      return;
+    }
+
+    apiFetch('/auth/session')
+      .then((res) => {
+        if (res && res.user) {
+          _persist(storedToken, res.user);
+        }
+      })
+      .catch((err) => {
+        console.warn('Session verification failed, clearing session:', err.message);
+        _persist(null, null);
+      })
+      .finally(() => {
+        setSessionLoading(false);
+      });
+  }, []);
+
+  const login = useCallback(async (identifier, password) => {
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     });
     _persist(data.access_token, data.user);
     return data.user;
@@ -43,10 +69,27 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
-  const logout = useCallback(() => _persist(null, null), []);
+  const logout = useCallback(async () => {
+    try {
+      await apiFetch('/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors on logout
+    }
+    _persist(null, null);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, login, register, logout, isLoggedIn: !!token }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        user,
+        login,
+        register,
+        logout,
+        isLoggedIn: !!token,
+        sessionLoading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -7,7 +7,15 @@ export default defineConfig({
   server: {
     proxy: {
       // Forward /api/* requests to the FastAPI backend during development.
-      // Run: uvicorn backend.main:app --reload --port 8000
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    proxy: {
+      // Forward /api/* requests during preview testing.
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

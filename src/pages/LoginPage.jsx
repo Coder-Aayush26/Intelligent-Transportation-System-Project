@@ -1,26 +1,31 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './AuthPage.css';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, isLoggedIn, sessionLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [password,   setPassword]   = useState('');
+  const [error,      setError]      = useState('');
+  const [loading,    setLoading]    = useState(false);
+
+  // If already authenticated, redirect directly to dashboard
+  if (!sessionLoading && isLoggedIn) {
+    return <Navigate to="/app/dashboard" replace />;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(identifier, password);
       navigate('/app/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message || 'Incorrect email or password.');
+      setError(err.message || 'Incorrect Login ID / email or password.');
     } finally {
       setLoading(false);
     }
@@ -31,19 +36,19 @@ export default function LoginPage() {
       <div className="auth-card">
         <div className="auth-logo">🚦 ITS</div>
         <h1 className="auth-title">Welcome back</h1>
-        <p className="auth-sub">Sign in to your account to continue.</p>
+        <p className="auth-sub">Sign in with your Login ID or Email to continue.</p>
 
         {error && <div className="auth-error">⚠ {error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <label>Email address</label>
+          <label>Email or Login ID</label>
           <input
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+            type="text"
+            placeholder="you@example.com or username"
+            value={identifier}
+            onChange={e => setIdentifier(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
           />
 
           <label>Password</label>

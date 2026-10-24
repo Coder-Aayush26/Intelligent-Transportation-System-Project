@@ -34,21 +34,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Allow the Vite dev server (any localhost port) during development.
+# Allow any localhost or 127.0.0.1 port (Vite 5173, 5174, preview 4173, etc.) + production frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:4173",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:4173",
         *filter(None, [os.getenv("FRONTEND_URL")]),
     ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register routes with /api prefix (primary) and root prefix (alias fallback)
 app.include_router(auth_router.router, prefix="/api")
+app.include_router(auth_router.router)  # supports /auth/login as well
 app.include_router(incidents.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(verifications.router, prefix="/api")

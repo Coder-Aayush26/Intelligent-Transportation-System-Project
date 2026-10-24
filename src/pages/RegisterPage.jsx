@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './AuthPage.css';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, isLoggedIn, sessionLoading } = useAuth();
   const navigate = useNavigate();
 
   const [name,     setName]     = useState('');
@@ -13,6 +13,11 @@ export default function RegisterPage() {
   const [confirm,  setConfirm]  = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+
+  // If already authenticated, redirect directly to dashboard
+  if (!sessionLoading && isLoggedIn) {
+    return <Navigate to="/app/dashboard" replace />;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();

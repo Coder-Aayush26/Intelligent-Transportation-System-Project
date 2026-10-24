@@ -2,13 +2,13 @@
  * Thin fetch wrapper.
  * All API modules import this so error handling and auth token management live in one place.
  *
- * In development, requests are sent to same-origin /api/* so Vite proxies them to localhost:8000.
+ * In development and preview, requests are sent to same-origin /api/* so Vite proxies them to localhost:8000.
  * In production, VITE_API_URL can be set to the remote backend origin if hosted on a separate domain.
  */
 
-const API_ORIGIN = import.meta.env.DEV
+const API_ORIGIN = (import.meta.env.DEV || !import.meta.env.VITE_API_URL)
   ? ''
-  : (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  : import.meta.env.VITE_API_URL.replace(/\/$/, '');
 const BASE = `${API_ORIGIN}/api`;
 
 export async function apiFetch(path, options = {}) {
@@ -28,15 +28,26 @@ export async function apiFetch(path, options = {}) {
   }
 
   if (!res.ok) {
-    let errorDetail = res.statusText;
+    let errorDetail = '';
     try {
-      const data = await res.json();
-      if (data && data.detail) {
-        errorDetail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+      const clone = res.clone();
+      try {
+        const data = await clone.json();
+        if (data && data.detail) {
+          errorDetail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+        }
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) {
+          if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            errorDetail = `Service endpoint not found (${res.status} at ${path}). Please check backend status.`;
+          } else {
+            errorDetail = text;
+          }
+        }
       }
     } catch {
-      const text = await res.text().catch(() => '');
-      if (text) errorDetail = text;
+      // fallback
     }
     throw new Error(errorDetail || `Request failed with status ${res.status}`);
   }
