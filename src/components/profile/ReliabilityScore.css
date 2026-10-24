@@ -7,7 +7,11 @@
 .rel-out-of { font-size: 16px; font-weight: 400; opacity: 0.5; }
 .stars { font-size: 18px; color: #f59e0b; letter-spacing: 2px; margin-bottom: 10px; }
 .tag-green { background: var(--green-light); color: var(--green); border: 1px solid #bbf7d0; border-radius: 20px; padding: 4px 12px; font-size: 11.5px; font-weight: 700; }
+.tag-muted { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; border-radius: 20px; padding: 4px 12px; font-size: 11.5px; font-weight: 600; }
+.rel-footnote { font-size: 12px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
 .factor-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text-soft); }
 .factor-row:last-child { border-bottom: none; }
 .check-ok { color: var(--green); font-weight: 700; }
+.check-info { color: #64748b; font-weight: 700; font-size: 16px; }
 @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+

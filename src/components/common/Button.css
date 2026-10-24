@@ -38,6 +38,19 @@
   transform: scale(1.03) translateY(-1px);
 }
 
+/* ── Danger ──────────────────────────────────────────────────── */
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: scale(1.04) translateY(-1px);
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.4);
+}
+
 /* ── Sizes ───────────────────────────────────────────────────── */
 .btn-sm   { padding: 7px 14px; font-size: 12px; border-radius: 8px; }
 .btn-full { width: 100%; }
+

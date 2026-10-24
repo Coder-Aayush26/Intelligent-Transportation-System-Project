@@ -19,17 +19,26 @@ export function AuthProvider({ children }) {
   const _persist = (tok, usr) => {
     setToken(tok);
     setUser(usr);
-    if (tok) {
+    if (tok && usr) {
       localStorage.setItem('its_token', tok);
       localStorage.setItem('its_user', JSON.stringify(usr));
     } else {
       localStorage.removeItem('its_token');
       localStorage.removeItem('its_user');
+<<<<<<< HEAD
+=======
+      try {
+        sessionStorage.removeItem('its_lat');
+        sessionStorage.removeItem('its_lng');
+      } catch {
+        // ignore
+      }
+>>>>>>> 86a0a02195a86a90e0da9174430fa834262b53a6
       clearApiCache();
     }
   };
 
-  // Validate active session on mount
+  // Validate active session in MongoDB on mount
   useEffect(() => {
     const storedToken = localStorage.getItem('its_token');
     if (!storedToken) {
@@ -79,6 +88,18 @@ export function AuthProvider({ children }) {
     _persist(null, null);
   }, []);
 
+  const updateAuthUser = useCallback((partialUser) => {
+    setUser((prev) => {
+      const updated = { ...(prev || {}), ...partialUser };
+      try {
+        localStorage.setItem('its_user', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -87,6 +108,7 @@ export function AuthProvider({ children }) {
         login,
         register,
         logout,
+        updateAuthUser,
         isLoggedIn: !!token,
         sessionLoading,
       }}
