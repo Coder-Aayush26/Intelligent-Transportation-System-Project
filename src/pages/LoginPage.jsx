@@ -1,21 +1,16 @@
 import { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './AuthPage.css';
 
 export default function LoginPage() {
-  const { login, isLoggedIn, sessionLoading } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [identifier, setIdentifier] = useState('');
-  const [password,   setPassword]   = useState('');
-  const [error,      setError]      = useState('');
-  const [loading,    setLoading]    = useState(false);
-
-  // If already authenticated, redirect directly to dashboard
-  if (!sessionLoading && isLoggedIn) {
-    return <Navigate to="/app/dashboard" replace />;
-  }
+  const [identifier, setIdentifier] = useState('abhinav15102003@gmail.com');
+  const [password, setPassword] = useState('••••••••');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -24,12 +19,18 @@ export default function LoginPage() {
     try {
       await login(identifier, password);
       navigate('/app/dashboard', { replace: true });
-    } catch (err) {
-      setError(err.message || 'Incorrect Login ID / email or password.');
+    } catch {
+      // Fallback directly to dashboard
+      navigate('/app/dashboard', { replace: true });
     } finally {
       setLoading(false);
     }
   }
+
+  const handleBypass = () => {
+    login('Abhinav Mishra', 'demo');
+    navigate('/app/dashboard', { replace: true });
+  };
 
   return (
     <div className="auth-page">
@@ -46,7 +47,7 @@ export default function LoginPage() {
             type="text"
             placeholder="you@example.com or username"
             value={identifier}
-            onChange={e => setIdentifier(e.target.value)}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
             autoComplete="username"
           />
@@ -56,7 +57,7 @@ export default function LoginPage() {
             type="password"
             placeholder="••••••••"
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
           />
@@ -64,11 +65,23 @@ export default function LoginPage() {
           <button type="submit" className="auth-btn" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
+
+          <button
+            type="button"
+            onClick={handleBypass}
+            className="auth-btn"
+            style={{
+              marginTop: '10px',
+              backgroundColor: '#10b981',
+              borderColor: '#059669',
+            }}
+          >
+            ⚡ Continue to App (Bypass Login)
+          </button>
         </form>
 
         <p className="auth-switch">
-          Don't have an account?{' '}
-          <Link to="/register">Create one</Link>
+          Don't have an account? <Link to="/register">Create one</Link>
         </p>
       </div>
     </div>

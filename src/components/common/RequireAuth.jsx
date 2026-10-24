@@ -1,7 +1,3 @@
-/**
- * RequireAuth — wraps protected routes.
- * Waits for session check to complete, then redirects to /login if not authenticated.
- */
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 

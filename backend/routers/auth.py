@@ -48,6 +48,7 @@ def _safe_user(user: dict) -> dict:
         "name": user.get("name", ""),
         "fullName": user.get("full_name", user.get("name", "")),
         "email": user.get("email", ""),
+        "avatarUrl": user.get("avatar_url") or user.get("avatarUrl") or None,
         "memberSince": user.get("member_since", ""),
         "reliabilityScore": user.get("reliability_score", 3.0),
         "reliabilityLabel": user.get("reliability_label", "New Member"),

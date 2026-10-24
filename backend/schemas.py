@@ -93,19 +93,44 @@ class VerificationOut(BaseModel):
     verdict: str
 
 
-# ---------- User ----------
+# ---------- User & Settings ----------
+
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class UserSettingsUpdate(BaseModel):
+    notificationRadius: Optional[float] = None
+    nearbyVerificationRequests: Optional[bool] = None
+    nearbyNewIncidents: Optional[bool] = None
+    highSeverityAlerts: Optional[bool] = None
+    categories: Optional[Dict[str, bool]] = None
+    locationSharingEnabled: Optional[bool] = None
+    browserNotificationsEnabled: Optional[bool] = None
+
+
+class UserLocationUpdate(BaseModel):
+    lat: float
+    lng: float
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    id: int
+    id: Any = "0"
     name: str
     fullName: str = ""
     email: str
+    avatarUrl: Optional[str] = None
     memberSince: str = ""
-    reliabilityScore: float = 3.0
-    reliabilityLabel: str = "Average"
+    reliabilityScore: Optional[float] = 3.0
+    reliabilityLabel: Optional[str] = "Average"
+    totalReports: int = 0
+    totalVerifications: int = 0
     scoreFactors: list[str] = []
     recentActivity: list[dict] = []
+    settings: Optional[Dict[str, Any]] = None
 
 
 # ---------- Stats ----------

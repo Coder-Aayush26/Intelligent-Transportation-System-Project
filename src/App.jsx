@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import NotificationsPage from './pages/NotificationsPage';
 import NearbyIncidentsPage from './pages/NearbyIncidentsPage';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="nearby" element={<NearbyIncidentsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
 
         <Route
           path="reports"
@@ -49,10 +51,6 @@ export default function App() {
         <Route
           path="analytics"
           element={<PlaceholderPage title="Analytics" description="Historical GIS analysis — hotspots, recurring disruptions, and trends." />}
-        />
-        <Route
-          path="settings"
-          element={<PlaceholderPage title="Settings" description="Notification radius, alert preferences, and account settings." />}
         />
       </Route>
 
