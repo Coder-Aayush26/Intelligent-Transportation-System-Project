@@ -16,19 +16,14 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from . import database
 from .database import MONGO_URI
 from .routers import incidents, users, verifications
+from .routers import auth as auth_router
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Startup: connect to MongoDB and seed. Shutdown: close connection."""
+    """Startup: connect to MongoDB. Shutdown: close connection."""
     database.client = AsyncIOMotorClient(MONGO_URI)
-    db = database.get_db()
-    
-    from .seed import seed_db
-    await seed_db(db)
-    
     yield  # application runs here
-    
     database.client.close()
 
 
@@ -53,6 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(verifications.router, prefix="/api")

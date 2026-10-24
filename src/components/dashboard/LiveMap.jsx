@@ -1,6 +1,40 @@
 import { useNavigate } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { mapLegend, CATEGORY_STYLES } from '../../data/mockData';
 import './LiveMap.css';
+
+// Fix Leaflet's default icon broken paths in bundlers
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+/** Creates a coloured circle icon for each incident category */
+function makePinIcon(color, icon) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="osm-pin" style="background:${color}">${icon}</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18],
+  });
+}
+
+/** Keeps the map centred when incidents first load */
+function FitBounds({ incidents }) {
+  const map = useMap();
+  if (incidents.length === 0) return null;
+  const points = incidents.map((inc) => [inc.coords.lat, inc.coords.lng]);
+  map.fitBounds(points, { padding: [40, 40], maxZoom: 14 });
+  return null;
+}
+
+// Default centre — Indore, MP (matches mock data)
+const DEFAULT_CENTER = [22.7196, 75.8577];
 
 export default function LiveMap({ incidents = [], loading = false }) {
   const navigate = useNavigate();
@@ -8,54 +42,51 @@ export default function LiveMap({ incidents = [], loading = false }) {
   return (
     <div className="map-card">
       <div className="map-canvas">
-        <svg width="100%" height="100%" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          {/* Light map base */}
-          <rect width="800" height="440" fill="#eef3ff" />
-          {/* City blocks */}
-          <g fill="#dce6f5" stroke="#c8d8ef" strokeWidth="1">
-            <rect x="40"  y="30"  width="120" height="90" rx="4"/>
-            <rect x="200" y="60"  width="90"  height="70" rx="4"/>
-            <rect x="520" y="40"  width="110" height="80" rx="4"/>
-            <rect x="660" y="90"  width="100" height="90" rx="4"/>
-            <rect x="60"  y="260" width="140" height="100" rx="4"/>
-            <rect x="600" y="270" width="130" height="110" rx="4"/>
-            <rect x="300" y="290" width="100" height="90"  rx="4"/>
-          </g>
-          {/* Roads — white with blue border */}
-          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="#fff" strokeWidth="22" fill="none" strokeLinecap="round"/>
-          <path d="M120,0 C170,120 90,260 150,440"  stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round"/>
-          <path d="M560,0 C520,140 610,260 560,440" stroke="#fff" strokeWidth="18" fill="none" strokeLinecap="round"/>
-          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round"/>
-          {/* Road centre-lines */}
-          <path d="M0,180 C160,150 300,230 460,190 S 650,140 800,170" stroke="rgba(37,99,235,0.25)" strokeWidth="1" strokeDasharray="10 8" fill="none"/>
-          <path d="M0,340 C220,320 380,360 560,330 S 700,300 800,320" stroke="rgba(37,99,235,0.2)"  strokeWidth="1" strokeDasharray="8 6"  fill="none"/>
-        </svg>
-
         {loading && (
           <div className="map-loading-overlay">Loading incidents…</div>
         )}
 
-        {incidents.map((incident) => {
-          const style = CATEGORY_STYLES[incident.category] ?? CATEGORY_STYLES.Other;
-          const pos = incident.mapPosition ?? {};
-          return (
-            <button
-              key={incident.id}
-              className="map-pin"
-              style={{ top: pos.top ?? '50%', left: pos.left ?? '50%', background: style.color }}
-              onClick={() => navigate(`/app/incidents/${incident.id}`)}
-              aria-label={`${incident.category} at ${incident.location}`}
-            >
-              <span>{style.icon}</span>
-            </button>
-          );
-        })}
+        <MapContainer
+          center={DEFAULT_CENTER}
+          zoom={13}
+          style={{ width: '100%', height: '100%' }}
+          zoomControl={false}
+          attributionControl={true}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
 
-        <div className="map-controls">
-          <button className="map-ctrl-btn" aria-label="Recenter">⛶</button>
-          <button className="map-ctrl-btn" aria-label="Zoom in">+</button>
-          <button className="map-ctrl-btn" aria-label="Zoom out">−</button>
-        </div>
+          {incidents.length > 0 && <FitBounds incidents={incidents} />}
+
+          {incidents.map((incident) => {
+            const style = CATEGORY_STYLES[incident.category] ?? CATEGORY_STYLES.Other;
+            return (
+              <Marker
+                key={incident.id}
+                position={[incident.coords.lat, incident.coords.lng]}
+                icon={makePinIcon(style.color, style.icon)}
+              >
+                <Popup>
+                  <div className="osm-popup">
+                    <strong>{style.icon} {incident.category}</strong>
+                    <p>{incident.location}</p>
+                    <p className="osm-popup-meta">
+                      Severity: <b>{incident.severity}</b> &nbsp;|&nbsp; Conf: <b>{incident.confidence}%</b>
+                    </p>
+                    <button
+                      className="osm-popup-link"
+                      onClick={() => navigate(`/app/incidents/${incident.id}`)}
+                    >
+                      View Details →
+                    </button>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MapContainer>
       </div>
 
       <div className="map-legend">

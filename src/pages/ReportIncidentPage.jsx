@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import ReportForm from '../components/report/ReportForm';
 import LocationPreview from '../components/report/LocationPreview';
 import './ReportIncidentPage.css';
 
 export default function ReportIncidentPage() {
+  // Lifted GPS state — shared between ReportForm (writes) and LocationPreview (reads)
+  const [gpsLocation, setGpsLocation] = useState(null);
+  // { lat, lng, address, timestamp }
+
   return (
     <div>
       <div className="page-title-row">
@@ -14,9 +19,14 @@ export default function ReportIncidentPage() {
       </div>
 
       <div className="form-grid">
-        <ReportForm />
+        <ReportForm onLocationAcquired={setGpsLocation} />
         <div>
-          <LocationPreview />
+          <LocationPreview
+            lat={gpsLocation?.lat}
+            lng={gpsLocation?.lng}
+            address={gpsLocation?.address}
+            timestamp={gpsLocation?.timestamp}
+          />
           <div className="form-card note-card">
             <h4 className="panel-heading">Why this matters</h4>
             <p className="detail-desc">

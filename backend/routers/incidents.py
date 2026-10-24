@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..database import get_db
 from ..schemas import IncidentCreate, IncidentOut, StatsOut
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -35,10 +36,14 @@ async def list_incidents(db = Depends(get_db)):
 
 
 @router.post("/", response_model=IncidentOut, status_code=201)
-async def create_incident(payload: IncidentCreate, db = Depends(get_db)):
-    """Create a new incident report."""
+async def create_incident(
+    payload: IncidentCreate,
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a new incident report. Requires authentication."""
     incident_id = f"inc-{uuid.uuid4().hex[:8]}"
-    
+
     inc_doc = {
         "_id": incident_id,
         "id": incident_id,
@@ -50,7 +55,7 @@ async def create_incident(payload: IncidentCreate, db = Depends(get_db)):
         "severity": payload.severity,
         "confidence": 50,  # starts at 50; rises/falls with verifications
         "description": payload.description,
-        "reporter": payload.reporter,
+        "reporter": current_user.get("name", "Anonymous"),  # pulled from JWT
         "source": payload.source,
         "media_urls": payload.media_urls,
         "media_count": len(payload.media_urls),
@@ -60,7 +65,7 @@ async def create_incident(payload: IncidentCreate, db = Depends(get_db)):
         "reported_at_full": datetime.utcnow(),
         "is_active": 1,
     }
-    
+
     await db.incidents.insert_one(inc_doc)
     return IncidentOut.from_mongo_doc(inc_doc, [])
 

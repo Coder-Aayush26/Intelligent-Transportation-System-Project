@@ -1,3 +1,41 @@
+/* ── OSM shared styles (also used in LiveMap.css, kept in sync) ─ */
+.osm-pin {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.user-location-pin {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #2563eb; border: 2.5px solid #fff;
+  box-shadow: 0 0 0 4px rgba(37,99,235,0.25);
+  animation: ping 2s ease-in-out infinite;
+}
+.osm-popup { min-width: 160px; font-family: inherit; }
+.osm-popup strong { font-size: 13px; display: block; margin-bottom: 4px; }
+.osm-popup p { font-size: 12px; color: #444; margin: 2px 0; }
+.osm-popup-meta { color: #666 !important; }
+.osm-popup-link {
+  margin-top: 8px; display: inline-block;
+  font-size: 12px; font-weight: 600; color: #2563eb;
+  background: none; border: none; cursor: pointer; padding: 0;
+  text-decoration: underline;
+}
+
+/* ── Nearby map container ─────────────────────────────────────── */
+.nearby-map-wrap {
+  height: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 28px;
+}
+.nearby-map-wrap .leaflet-container {
+  height: 100%; width: 100%; z-index: 0;
+}
+
 .nearby-page {
   max-width: 1000px;
   margin: 0 auto;

@@ -1,23 +1,35 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
+import RequireAuth from './components/common/RequireAuth';
+
 import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import ReportIncidentPage from './pages/ReportIncidentPage';
 import IncidentDetailPage from './pages/IncidentDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import PlaceholderPage from './pages/PlaceholderPage';
-
 import NotificationsPage from './pages/NotificationsPage';
 import NearbyIncidentsPage from './pages/NearbyIncidentsPage';
 
 export default function App() {
   return (
     <Routes>
-      {/* Public marketing page */}
+      {/* Public pages */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
 
-      {/* Authenticated app shell (sidebar + topbar) wraps every /app/* route */}
-      <Route path="/app" element={<AppLayout />}>
+      {/* Protected app shell — wrapped in RequireAuth */}
+      <Route
+        path="/app"
+        element={
+          <RequireAuth>
+            <AppLayout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="report" element={<ReportIncidentPage />} />
@@ -26,8 +38,6 @@ export default function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="nearby" element={<NearbyIncidentsPage />} />
 
-        {/* Sidebar items scoped for a future build-out — kept as real
-            routes now so the nav's active state and links are correct. */}
         <Route
           path="reports"
           element={<PlaceholderPage title="My Reports" description="A history of incidents you've reported, with their current verification status." />}
@@ -46,7 +56,7 @@ export default function App() {
         />
       </Route>
 
-      {/* Fallback for unknown paths */}
+      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

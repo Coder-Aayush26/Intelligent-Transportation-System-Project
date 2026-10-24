@@ -1,8 +1,43 @@
 /* ── Location Preview ─────────────────────────────────────────── */
-.mini-map-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 16px; box-shadow: var(--shadow-card); }
-.mini-map { height: 140px; background: #eef3ff; position: relative; display: flex; align-items: center; justify-content: center; }
-.mini-map::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(37,99,235,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.06) 1px, transparent 1px); background-size: 30px 30px; }
-.mini-pin { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; background: #fee2e2; border: 2px solid var(--red); display: flex; align-items: center; justify-content: center; font-size: 12px; animation: floatY 3s ease-in-out infinite; box-shadow: 0 4px 12px rgba(220,38,38,0.25); }
-.mini-info { padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
-.mini-info span { color: var(--text-soft); font-weight: 500; }
+.mini-map-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.mini-map {
+  height: 160px;
+  position: relative;
+}
+
+/* Leaflet container fills the mini-map area */
+.mini-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 0;
+}
+
+.mini-info {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
 .mini-info b { color: var(--text); }
+
+.mini-address {
+  padding: 6px 14px 10px;
+  font-size: 12px;
+  color: var(--text-soft);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

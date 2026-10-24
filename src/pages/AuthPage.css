@@ -1,0 +1,109 @@
+/* ── Auth pages (Login + Register) ────────────────────────────── */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg, #f1f5fd);
+  padding: 24px;
+}
+
+.auth-card {
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e2e8f4);
+  border-radius: 20px;
+  padding: 44px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 8px 40px rgba(37, 99, 235, 0.08);
+}
+
+.auth-logo {
+  font-size: 34px;
+  margin-bottom: 12px;
+}
+
+.auth-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-dark, #0f172a);
+  margin-bottom: 6px;
+}
+
+.auth-sub {
+  font-size: 14px;
+  color: var(--muted, #94a3b8);
+  margin-bottom: 28px;
+}
+
+.auth-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-form label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dark, #0f172a);
+  margin-top: 10px;
+}
+
+.auth-form input {
+  padding: 10px 14px;
+  border: 1.5px solid var(--border, #e2e8f4);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text, #1e293b);
+  background: var(--bg, #f8faff);
+  transition: border-color 0.2s;
+  outline: none;
+}
+.auth-form input:focus {
+  border-color: #2563eb;
+  background: #fff;
+}
+
+.auth-btn {
+  margin-top: 20px;
+  padding: 12px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.auth-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+.auth-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted, #94a3b8);
+  margin-top: 20px;
+}
+.auth-switch a {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-switch a:hover { text-decoration: underline; }

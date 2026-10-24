@@ -98,8 +98,8 @@ export default function LandingPage() {
           <a href="#about">About</a>
         </div>
         <div className="actions">
-          <Button as={Link} to="/app/dashboard" variant="outline" size="sm">Login</Button>
-          <Button as={Link} to="/app/dashboard" size="sm">Get Started</Button>
+          <Button as={Link} to="/login" variant="outline" size="sm">Login</Button>
+          <Button as={Link} to="/register" size="sm">Get Started</Button>
         </div>
       </nav>
 

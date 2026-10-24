@@ -1,3 +1,39 @@
+/* ── Leaflet container fix ───────────────────────────────────── */
+.map-canvas .leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 0;
+  z-index: 0;
+}
+
+/* ── OSM custom pin ──────────────────────────────────────────── */
+.osm-pin {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  position: relative;
+}
+.osm-pin::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px solid currentColor; opacity: 0.3;
+  animation: ping 2.5s cubic-bezier(0,0,0.2,1) infinite;
+}
+
+/* ── OSM popup content ───────────────────────────────────────── */
+.osm-popup { min-width: 160px; font-family: inherit; }
+.osm-popup strong { font-size: 13px; display: block; margin-bottom: 4px; }
+.osm-popup p { font-size: 12px; color: #444; margin: 2px 0; }
+.osm-popup-meta { color: #666 !important; }
+.osm-popup-link {
+  margin-top: 8px; display: inline-block;
+  font-size: 12px; font-weight: 600; color: var(--neon, #2563eb);
+  background: none; border: none; cursor: pointer; padding: 0;
+  text-decoration: underline;
+}
+.osm-popup-link:hover { opacity: 0.75; }
+
 /* ── Map Card ─────────────────────────────────────────────────── */
 .map-card {
   background: var(--card);

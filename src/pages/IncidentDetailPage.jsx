@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { incidents as mockIncidents } from '../data/mockData';
 import { fetchIncident } from '../api/incidents';
 import IncidentHeader from '../components/incident/IncidentHeader';
 import MediaGallery from '../components/incident/MediaGallery';
@@ -18,7 +17,7 @@ export default function IncidentDetailPage() {
       try {
         setIncident(await fetchIncident(id));
       } catch {
-        setIncident(mockIncidents.find((item) => item.id === id) ?? null);
+        setIncident(null);
       } finally {
         setLoading(false);
       }
@@ -43,7 +42,7 @@ export default function IncidentDetailPage() {
         <button className="back-link" onClick={() => navigate('/app/dashboard')}>← Back to Map</button>
         <div className="detail-card">
           <p className="detail-desc">
-            We couldn't find that incident. It may have expired or been merged with another report.
+            We couldn't find that incident. It may have expired or been resolved.
           </p>
           <Link className="btn btn-outline btn-sm" to="/app/dashboard">Back to live map</Link>
         </div>
