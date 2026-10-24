@@ -53,10 +53,13 @@ app.add_middleware(
 
 # Register routes with /api prefix (primary) and root prefix (alias fallback)
 app.include_router(auth_router.router, prefix="/api")
-app.include_router(auth_router.router)  # supports /auth/login as well
+app.include_router(auth_router.router)
 app.include_router(incidents.router, prefix="/api")
+app.include_router(incidents.router)
 app.include_router(users.router, prefix="/api")
+app.include_router(users.router)
 app.include_router(verifications.router, prefix="/api")
+app.include_router(verifications.router)
 
 
 @app.get("/")

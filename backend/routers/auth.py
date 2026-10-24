@@ -1,4 +1,5 @@
 """Auth router — register, login, session validation, and logout endpoints with MongoDB session storage."""
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -95,12 +96,24 @@ async def register(body: RegisterRequest, db = Depends(get_db)):
             detail="Email and password are required.",
         )
 
-    existing = await db.users.find_one({"email": email})
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists.",
-        )
+    safe_name_pattern = f"^{re.escape(name)}$"
+    existing_user = await db.users.find_one({
+        "$or": [
+            {"email": email},
+            {"name": {"$regex": safe_name_pattern, "$options": "i"}},
+        ]
+    })
+    if existing_user:
+        if existing_user.get("email", "").lower() == email:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This username is already taken. Please choose another name or sign in.",
+            )
 
     user_id = uuid.uuid4().hex
     user_doc = {
@@ -141,12 +154,14 @@ async def login(body: LoginRequest, db = Depends(get_db)):
             detail="Please enter your password.",
         )
 
-    # Allow login by email or by username/name (case-insensitive)
+    # Allow login by email or by username/name (case-insensitive, regex-safe)
+    safe_pattern = f"^{re.escape(raw_ident)}$"
     user = await db.users.find_one({
         "$or": [
             {"email": raw_ident.lower()},
-            {"name": {"$regex": f"^{raw_ident}$", "$options": "i"}},
-            {"full_name": {"$regex": f"^{raw_ident}$", "$options": "i"}},
+            {"email": {"$regex": safe_pattern, "$options": "i"}},
+            {"name": {"$regex": safe_pattern, "$options": "i"}},
+            {"full_name": {"$regex": safe_pattern, "$options": "i"}},
         ]
     })
 

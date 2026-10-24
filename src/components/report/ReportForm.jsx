@@ -7,17 +7,19 @@ import './ReportForm.css';
 
 const SEVERITY_LEVELS = ['Low', 'Medium', 'High', 'Critical'];
 
+const DEFAULT_ADDRESS = 'Indore, Madhya Pradesh';
+
 export default function ReportForm({ onLocationAcquired }) {
   const navigate = useNavigate();
   const [category, setCategory] = useState('');
-  const [severity, setSeverity] = useState('');
+  const [severity, setSeverity] = useState('Medium');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState(null);
   
   // Geolocation / Location state
   const [locLat, setLocLat] = useState(22.7196);
   const [locLng, setLocLng] = useState(75.8577);
-  const [locAddress, setLocAddress] = useState('');
+  const [locAddress, setLocAddress] = useState(DEFAULT_ADDRESS);
   const [manualAddress, setManualAddress] = useState('');
   const [isLocating, setIsLocating] = useState(false);
 
@@ -30,7 +32,7 @@ export default function ReportForm({ onLocationAcquired }) {
     onLocationAcquired?.({
       lat: locLat,
       lng: locLng,
-      address: locAddress || 'Indore, Madhya Pradesh',
+      address: locAddress || DEFAULT_ADDRESS,
       timestamp: new Date().toLocaleString(),
     });
   }, []);
@@ -116,12 +118,7 @@ export default function ReportForm({ onLocationAcquired }) {
     setSubmitting(true);
     setError('');
 
-    const finalAddress = locAddress || manualAddress;
-    if (!finalAddress) {
-      setError('Please provide a location (use GPS or enter address).');
-      setSubmitting(false);
-      return;
-    }
+    const finalAddress = (locAddress || manualAddress || DEFAULT_ADDRESS).trim();
 
     let uploadedUrls = [];
 
@@ -152,11 +149,11 @@ export default function ReportForm({ onLocationAcquired }) {
         method: 'POST',
         body: JSON.stringify({ 
           category, 
-          severity, 
+          severity: severity || 'Medium', 
           description,
           lat: locLat,
           lng: locLng,
-          location: finalAddress.split(',')[0],
+          location: (finalAddress.split(',')[0] || 'Indore').trim(),
           full_location: finalAddress,
           media_urls: uploadedUrls 
         }),
@@ -246,15 +243,17 @@ export default function ReportForm({ onLocationAcquired }) {
         <label>Location <span className="req">*</span></label>
         {locAddress ? (
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: 12, borderRadius: 8, fontSize: 14, color: '#166534', marginBottom: 8 }}>
-            <strong>📍 Location Acquired:</strong><br/>
-            {locAddress}
-            <div style={{ marginTop: 6 }}>
+            <strong>📍 Location:</strong> {locAddress}
+            <div style={{ marginTop: 8, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button type="button" variant="outline" size="sm" onClick={handleGetLocation} disabled={isLocating}>
+                {isLocating ? '📍 Locating...' : '📍 Use My Exact GPS'}
+              </Button>
               <button 
                 type="button" 
                 onClick={() => { setLocAddress(''); setManualAddress(''); }}
-                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 13, padding: 0, textDecoration: 'underline' }}
               >
-                Change Location
+                ✏️ Enter Different Address
               </button>
             </div>
           </div>

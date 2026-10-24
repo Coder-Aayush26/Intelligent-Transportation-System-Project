@@ -16,16 +16,24 @@ SCORE_FACTORS = [
 
 
 @router.get("/me", response_model=UserOut)
+@router.get("/me/", response_model=UserOut)
 async def get_me(
     current_user: dict = Depends(get_current_user),
     db = Depends(get_db),
 ):
     """Return the currently logged-in user's profile."""
     user = current_user
+    user_name = user.get("name")
+    user_id = str(user.get("_id", ""))
 
     # Build recent activity from actual incident reports
-    incidents_cursor = db.incidents.find({"reporter": user.get("name")}).limit(5)
-    incidents = await incidents_cursor.to_list(length=5)
+    incidents_cursor = db.incidents.find({
+        "$or": [
+            {"user_id": user_id},
+            {"reporter": user_name},
+        ]
+    }).sort("reported_at_full", -1).limit(10)
+    incidents = await incidents_cursor.to_list(length=10)
 
     activity = []
     for inc in incidents:
@@ -43,7 +51,7 @@ async def get_me(
         })
 
     return UserOut(
-        id=0,
+        id=user_id,
         name=user.get("name", ""),
         fullName=user.get("full_name", user.get("name", "")),
         email=user.get("email", ""),

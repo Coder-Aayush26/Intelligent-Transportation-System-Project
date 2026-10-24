@@ -5,7 +5,7 @@
  * On app load, validates the active session with the backend so user state is restored.
  */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../api/client';
+import { apiFetch, clearApiCache } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -25,6 +25,7 @@ export function AuthProvider({ children }) {
     } else {
       localStorage.removeItem('its_token');
       localStorage.removeItem('its_user');
+      clearApiCache();
     }
   };
 
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    apiFetch('/auth/session')
+    apiFetch('/auth/session', { noCache: true })
       .then((res) => {
         if (res && res.user) {
           _persist(storedToken, res.user);

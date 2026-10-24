@@ -10,6 +10,7 @@ router = APIRouter(tags=["verifications"])
 
 
 @router.post("/incidents/{incident_id}/verify", response_model=VerificationOut, status_code=201)
+@router.post("/incidents/{incident_id}/verify/", response_model=VerificationOut, status_code=201)
 async def verify_incident(
     incident_id: str,
     payload: VerificationCreate,

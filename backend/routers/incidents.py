@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..database import get_db
 from ..schemas import IncidentCreate, IncidentOut, StatsOut
-from ..auth import get_current_user
+from ..auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -20,6 +20,7 @@ def _confidence_from_verifications(verif_list) -> int:
     return max(5, min(99, score))
 
 
+@router.get("", response_model=List[IncidentOut])
 @router.get("/", response_model=List[IncidentOut])
 async def list_incidents(db = Depends(get_db)):
     """Return all currently active incidents."""
@@ -35,28 +36,36 @@ async def list_incidents(db = Depends(get_db)):
     return result
 
 
+@router.post("", response_model=IncidentOut, status_code=201)
 @router.post("/", response_model=IncidentOut, status_code=201)
 async def create_incident(
     payload: IncidentCreate,
     db = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_optional),
 ):
-    """Create a new incident report. Requires authentication."""
+    """Create a new incident report."""
     incident_id = f"inc-{uuid.uuid4().hex[:8]}"
+
+    reporter_name = "Anonymous"
+    reporter_user_id = None
+    if current_user:
+        reporter_name = current_user.get("name") or current_user.get("full_name") or "Community Member"
+        reporter_user_id = str(current_user.get("_id", ""))
 
     inc_doc = {
         "_id": incident_id,
         "id": incident_id,
         "category": payload.category,
-        "location": payload.location,
-        "full_location": payload.full_location,
+        "location": payload.location or "Unknown Location",
+        "full_location": payload.full_location or payload.location or "Unknown Location",
         "lat": payload.lat,
         "lng": payload.lng,
-        "severity": payload.severity,
+        "severity": payload.severity or "Medium",
         "confidence": 50,  # starts at 50; rises/falls with verifications
         "description": payload.description,
-        "reporter": current_user.get("name", "Anonymous"),  # pulled from JWT
-        "source": payload.source,
+        "reporter": reporter_name,
+        "user_id": reporter_user_id,
+        "source": payload.source or "Web App",
         "media_urls": payload.media_urls,
         "media_count": len(payload.media_urls),
         "ai_assessment": "Pending",
@@ -73,6 +82,7 @@ async def create_incident(
 # IMPORTANT: this literal route MUST come before /{incident_id} so FastAPI
 # does not match the string "stats" as an incident ID.
 @router.get("/stats/summary", response_model=StatsOut)
+@router.get("/stats/summary/", response_model=StatsOut)
 async def get_stats(db = Depends(get_db)):
     """Aggregated dashboard stats."""
     active_cursor = db.incidents.find({"is_active": 1})
@@ -103,6 +113,7 @@ async def get_stats(db = Depends(get_db)):
 
 
 @router.get("/nearby", response_model=List[IncidentOut])
+@router.get("/nearby/", response_model=List[IncidentOut])
 async def get_nearby_incidents(lat: float, lng: float, radius: float = 5.0, db = Depends(get_db)):
     """Return active incidents near the provided coordinates (rough bounding box)."""
     # Simple rough bounding box filter: 1 deg lat/lng is roughly 111km.
@@ -126,6 +137,7 @@ async def get_nearby_incidents(lat: float, lng: float, radius: float = 5.0, db =
 
 
 @router.get("/notifications", response_model=List[IncidentOut])
+@router.get("/notifications/", response_model=List[IncidentOut])
 async def get_notifications(db = Depends(get_db)):
     """Return high-priority active incidents for notifications (confidence >= 70)."""
     active_cursor = db.incidents.find({"is_active": 1})
@@ -144,6 +156,7 @@ async def get_notifications(db = Depends(get_db)):
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)
+@router.get("/{incident_id}/", response_model=IncidentOut)
 async def get_incident(incident_id: str, db = Depends(get_db)):
     """Return a single incident by ID."""
     inc = await db.incidents.find_one({"id": incident_id})

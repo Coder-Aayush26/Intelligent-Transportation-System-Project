@@ -83,7 +83,7 @@ class IncidentOut(BaseModel):
 
 class VerificationCreate(BaseModel):
     verdict: str   # "confirm" | "contradict"
-    user_id: Optional[int] = None
+    user_id: Optional[Any] = None
 
 
 class VerificationOut(BaseModel):
@@ -97,7 +97,7 @@ class VerificationOut(BaseModel):
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    id: int
+    id: Any = 0
     name: str
     fullName: str = ""
     email: str
