@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   User, Settings, MapPin, LogOut, ChevronDown, 
-  Search, Crosshair, X, Loader2, Bell 
+  Search, Crosshair, X, Loader2, Bell, Home
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppLocation } from '../../context/LocationContext';
@@ -315,9 +315,27 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
 
       <div className="spacer" />
 
-      <button className="btn btn-outline btn-sm" onClick={() => navigate('/app/dashboard')}>
-        ☰ Filters
-      </button>
+      <div className="topbar-actions">
+        <Link to="/" className="topbar-home-btn" title="Return to Landing Page">
+          <Home size={15} />
+          <span className="home-btn-label">Landing Page</span>
+        </Link>
+
+        <button 
+          type="button"
+          className="btn btn-outline btn-sm topbar-filter-btn" 
+          onClick={() => {
+            if (pathname === '/app/dashboard' || pathname === '/app/live-map') {
+              window.dispatchEvent(new CustomEvent('its-toggle-map-filters'));
+            } else {
+              navigate('/app/dashboard');
+            }
+          }}
+          title="Open Live Map filters"
+        >
+          ☰ Filters
+        </button>
+      </div>
 
       <div className="topbar-right">
         <button
@@ -354,6 +372,16 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
               </div>
 
               <div className="dropdown-divider" />
+
+              <Link
+                to="/"
+                className="dropdown-item"
+                role="menuitem"
+                onClick={() => setIsUserDropdownOpen(false)}
+              >
+                <Home size={16} className="dropdown-item-icon" />
+                <span>Landing Page</span>
+              </Link>
 
               <Link
                 to="/app/profile"

@@ -1,5 +1,4 @@
 import IncidentCard from './IncidentCard';
-import Button from '../common/Button';
 import './ActiveIncidentsPanel.css';
 
 export default function ActiveIncidentsPanel({ 

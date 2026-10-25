@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { 
   Map, FileText, MapPin, Bell, Star, BarChart2, PlusCircle, 
-  User, Settings, LogOut, Menu
+  User, Settings, LogOut, Menu, Home
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchNotifications } from '../../api/incidents';
@@ -43,13 +43,23 @@ export default function Sidebar() {
     <>
       <aside className="sidebar">
         <div className="sb-top">
-          <div className="sb-logo">ITS</div>
+          <Link to="/" className="sb-logo-link" title="Return to Landing Page">
+            <div className="sb-logo">ITS</div>
+          </Link>
           <button className="sb-menu" aria-label="Collapse sidebar">
             <Menu size={20} />
           </button>
         </div>
 
         <nav aria-label="Main">
+          {/* Direct Home / Landing Page Action */}
+          <Link to="/" className="nav-item home-nav-item" title="Return to Home Landing Page">
+            <Home size={18} className="ic" aria-hidden="true" />
+            <span>Landing Page</span>
+          </Link>
+
+          <div className="sb-divider" role="separator" />
+
           {BASE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const showBadge = item.label === 'Notifications' && notifCount > 0;
