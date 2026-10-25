@@ -20,6 +20,7 @@ async function execFetch(url, options, headers) {
 
 export async function apiFetch(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('its_token') : null;
   // Normalize path: ensure single leading slash and strip trailing slashes before query params or string end
   const cleanPath = (path.startsWith('/') ? path : `/${path}`).replace(/\/+(\?|$)/, '$1');
   const cacheKey = `${token ? 'auth' : 'anon'}:${cleanPath}`;
