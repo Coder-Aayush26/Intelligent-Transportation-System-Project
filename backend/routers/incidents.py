@@ -159,8 +159,15 @@ async def get_stats(
     lng: Optional[float] = Query(None, description="Optional center longitude"),
     radius: Optional[float] = Query(None, gt=0, le=1000.0, description="Optional radius in km"),
     db = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Aggregated dashboard stats, optionally filtered by local geographic scope."""
+    if (lat is None or lng is None) and radius is not None and current_user:
+        last_loc = current_user.get("last_known_location") or {}
+        if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
+            lat = float(last_loc["lat"])
+            lng = float(last_loc["lng"])
+
     _validate_coords(lat, lng)
 
     query = {"is_active": {"$in": [1, True]}}
@@ -222,13 +229,29 @@ async def get_stats(
 @router.get("/nearby", response_model=List[IncidentOut])
 @router.get("/nearby/", response_model=List[IncidentOut])
 async def get_nearby_incidents(
-    lat: float = Query(..., ge=-90.0, le=90.0, description="Center latitude"),
-    lng: float = Query(..., ge=-180.0, le=180.0, description="Center longitude"),
+    lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Center latitude"),
+    lng: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Center longitude"),
     radius: float = Query(10.0, gt=0, le=1000.0, description="Radius in km"),
     category: Optional[str] = Query(None, description="Optional category filter"),
     db = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
-    """Return active incidents within the specified circular radius (in km) of the coordinates."""
+    """Return active incidents within the specified circular radius (in km) of coordinates or saved user location."""
+    if (lat is None or lng is None) and current_user:
+        last_loc = current_user.get("last_known_location") or {}
+        if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
+            lat = float(last_loc["lat"])
+            lng = float(last_loc["lng"])
+        elif current_user.get("lat") is not None and current_user.get("lng") is not None:
+            lat = float(current_user["lat"])
+            lng = float(current_user["lng"])
+
+    if lat is None or lng is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Coordinates (lat, lng) are required, or save your location in your user profile.",
+        )
+
     _validate_coords(lat, lng)
 
     deg_lat = radius / 111.0

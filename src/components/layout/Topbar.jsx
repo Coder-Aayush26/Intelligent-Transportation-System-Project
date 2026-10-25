@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   User, Settings, MapPin, LogOut, ChevronDown, 
   Search, Crosshair, X, Loader2, Bell, Home
@@ -14,7 +14,6 @@ import './Topbar.css';
 
 export default function Topbar({ title = 'Search city, area, or landmark…' }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
   const { user, logout } = useAuth();
   const {
     selectedLocation,
@@ -320,21 +319,6 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
           <Home size={15} />
           <span className="home-btn-label">Landing Page</span>
         </Link>
-
-        <button 
-          type="button"
-          className="btn btn-outline btn-sm topbar-filter-btn" 
-          onClick={() => {
-            if (pathname === '/app/dashboard' || pathname === '/app/live-map') {
-              window.dispatchEvent(new CustomEvent('its-toggle-map-filters'));
-            } else {
-              navigate('/app/dashboard');
-            }
-          }}
-          title="Open Live Map filters"
-        >
-          ☰ Filters
-        </button>
       </div>
 
       <div className="topbar-right">

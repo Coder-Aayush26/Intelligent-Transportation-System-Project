@@ -22,7 +22,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "Construction": True,
         "Hazard": True,
     },
-    "locationSharingEnabled": False,
+    "locationSharingEnabled": True,
     "browserNotificationsEnabled": False,
 }
 
@@ -138,6 +138,12 @@ async def _build_user_out(user: dict, db) -> UserOut:
         scoreFactors=score_factors,
         recentActivity=activity,
         settings=merged_settings,
+        latitude=float(user.get("latitude") or user.get("lat")) if (user.get("latitude") is not None or user.get("lat") is not None) else None,
+        longitude=float(user.get("longitude") or user.get("lng")) if (user.get("longitude") is not None or user.get("lng") is not None) else None,
+        lat=float(user.get("lat") or user.get("latitude")) if (user.get("lat") is not None or user.get("latitude") is not None) else None,
+        lng=float(user.get("lng") or user.get("longitude")) if (user.get("lng") is not None or user.get("longitude") is not None) else None,
+        location=user.get("location"),
+        lastKnownLocation=user.get("last_known_location"),
     )
 
 
@@ -250,21 +256,80 @@ async def update_location(
     current_user: dict = Depends(get_current_user),
     db = Depends(get_db),
 ):
-    """Record current user's live coordinates for nearby verification requests."""
+    """Record current user's live coordinates for nearby incident calculation and verification requests."""
+    lat_val = body.latitude if body.latitude is not None else body.lat
+    lng_val = body.longitude if body.longitude is not None else body.lng
+
+    if lat_val is None or lng_val is None:
+        raise HTTPException(status_code=400, detail="Latitude and longitude coordinates are required.")
+
     # Validate lat / lng ranges
-    if not (-90.0 <= body.lat <= 90.0) or not (-180.0 <= body.lng <= 180.0):
+    if not (-90.0 <= lat_val <= 90.0) or not (-180.0 <= lng_val <= 180.0):
         raise HTTPException(status_code=400, detail="Invalid latitude or longitude.")
 
+    now = datetime.utcnow()
+    lat_f = float(lat_val)
+    lng_f = float(lng_val)
+
     loc_record = {
-        "lat": body.lat,
-        "lng": body.lng,
-        "updated_at": datetime.utcnow(),
+        "latitude": lat_f,
+        "longitude": lng_f,
+        "lat": lat_f,
+        "lng": lng_f,
+        "updated_at": now,
     }
+
+    user_id = current_user.get("_id")
+    match_conditions = [{"_id": user_id}]
+    if current_user.get("id"):
+        match_conditions.append({"id": current_user.get("id")})
+    if current_user.get("email"):
+        match_conditions.append({"email": current_user.get("email")})
+    try:
+        from bson import ObjectId
+        if isinstance(user_id, str) and ObjectId.is_valid(user_id):
+            match_conditions.append({"_id": ObjectId(user_id)})
+    except Exception:
+        pass
+
+    # Update users collection with both full ("latitude", "longitude") and short ("lat", "lng")
     await db.users.update_one(
-        {"_id": current_user["_id"]},
-        {"$set": {"last_known_location": loc_record}}
+        {"$or": match_conditions},
+        {
+            "$set": {
+                "latitude": lat_f,
+                "longitude": lng_f,
+                "lat": lat_f,
+                "lng": lng_f,
+                "location": loc_record,
+                "last_known_location": loc_record,
+                "location_updated_at": now,
+            }
+        }
     )
-    return {"status": "ok", "location": loc_record}
+
+    # Also update session records
+    await db.sessions.update_many(
+        {"$or": [{"user_id": str(user_id)}, {"email": current_user.get("email")}]},
+        {
+            "$set": {
+                "latitude": lat_f,
+                "longitude": lng_f,
+                "lat": lat_f,
+                "lng": lng_f,
+                "last_active": now,
+            }
+        }
+    )
+
+    return {
+        "status": "ok",
+        "latitude": lat_f,
+        "longitude": lng_f,
+        "lat": lat_f,
+        "lng": lng_f,
+        "location": loc_record,
+    }
 
 
 def _calc_conf(verif_list) -> int:

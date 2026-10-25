@@ -112,8 +112,10 @@ class UserSettingsUpdate(BaseModel):
 
 
 class UserLocationUpdate(BaseModel):
-    lat: float
-    lng: float
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class UserOut(BaseModel):
@@ -131,6 +133,12 @@ class UserOut(BaseModel):
     scoreFactors: list[str] = []
     recentActivity: list[dict] = []
     settings: Optional[Dict[str, Any]] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    location: Optional[Dict[str, Any]] = None
+    lastKnownLocation: Optional[Dict[str, Any]] = None
 
 
 # ---------- Stats ----------

@@ -59,18 +59,60 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (identifier, password) => {
+    let lat = null;
+    let lng = null;
+    try {
+      const savedLat = parseFloat(sessionStorage.getItem('its_device_lat') || sessionStorage.getItem('its_lat') || '');
+      const savedLng = parseFloat(sessionStorage.getItem('its_device_lng') || sessionStorage.getItem('its_lng') || '');
+      if (!isNaN(savedLat) && !isNaN(savedLng)) {
+        lat = savedLat;
+        lng = savedLng;
+      }
+    } catch {
+      // ignore
+    }
+
+    const payload = { identifier, password };
+    if (lat !== null && lng !== null) {
+      payload.lat = lat;
+      payload.lng = lng;
+      payload.latitude = lat;
+      payload.longitude = lng;
+    }
+
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify(payload),
     });
     _persist(data.access_token, data.user);
     return data.user;
   }, []);
 
   const register = useCallback(async (name, email, password) => {
+    let lat = null;
+    let lng = null;
+    try {
+      const savedLat = parseFloat(sessionStorage.getItem('its_device_lat') || sessionStorage.getItem('its_lat') || '');
+      const savedLng = parseFloat(sessionStorage.getItem('its_device_lng') || sessionStorage.getItem('its_lng') || '');
+      if (!isNaN(savedLat) && !isNaN(savedLng)) {
+        lat = savedLat;
+        lng = savedLng;
+      }
+    } catch {
+      // ignore
+    }
+
+    const payload = { name, email, password };
+    if (lat !== null && lng !== null) {
+      payload.lat = lat;
+      payload.lng = lng;
+      payload.latitude = lat;
+      payload.longitude = lng;
+    }
+
     const data = await apiFetch('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify(payload),
     });
     _persist(data.access_token, data.user);
     return data.user;

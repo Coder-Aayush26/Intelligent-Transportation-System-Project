@@ -23,6 +23,24 @@ from .routers import auth as auth_router
 async def lifespan(application: FastAPI):
     """Startup: connect to MongoDB. Shutdown: close connection."""
     database.client = AsyncIOMotorClient(MONGO_URI)
+    try:
+        db = database.get_db()
+        cursor = db.users.find({
+            "$or": [
+                {"latitude": None, "lat": {"$ne": None}},
+                {"longitude": None, "lng": {"$ne": None}},
+            ]
+        })
+        async for u in cursor:
+            lat = u.get("lat")
+            lng = u.get("lng")
+            if lat is not None and lng is not None:
+                await db.users.update_one(
+                    {"_id": u["_id"]},
+                    {"$set": {"latitude": float(lat), "longitude": float(lng)}}
+                )
+    except Exception as e:
+        pass
     yield  # application runs here
     database.client.close()
 
