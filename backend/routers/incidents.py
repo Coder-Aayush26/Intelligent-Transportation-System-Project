@@ -1,15 +1,44 @@
 """Incidents router — CRUD endpoints for traffic incidents."""
+import math
 import uuid
-from datetime import datetime
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..database import get_db
 from ..schemas import IncidentCreate, IncidentOut, StatsOut
-from ..auth import get_current_user, get_current_user_optional
+from ..auth import get_current_user_optional
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great circle distance between two points in kilometres."""
+    R = 6371.0  # Mean radius of Earth in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
+def _validate_coords(lat: Optional[float], lng: Optional[float]):
+    if lat is not None and not (-90.0 <= lat <= 90.0):
+        raise HTTPException(
+            status_code=400,
+            detail="Latitude must be between -90 and 90 degrees.",
+        )
+    if lng is not None and not (-180.0 <= lng <= 180.0):
+        raise HTTPException(
+            status_code=400,
+            detail="Longitude must be between -180 and 180 degrees.",
+        )
 
 
 def _confidence_from_verifications(verif_list) -> int:
@@ -22,17 +51,52 @@ def _confidence_from_verifications(verif_list) -> int:
 
 @router.get("", response_model=List[IncidentOut])
 @router.get("/", response_model=List[IncidentOut])
-async def list_incidents(db = Depends(get_db)):
-    """Return all currently active incidents."""
-    incidents_cursor = db.incidents.find({"is_active": 1})
-    incidents = await incidents_cursor.to_list(length=200)
-    
+async def list_incidents(
+    lat: Optional[float] = Query(None, description="Optional center latitude for geographic filtering"),
+    lng: Optional[float] = Query(None, description="Optional center longitude for geographic filtering"),
+    radius: Optional[float] = Query(None, gt=0, le=1000.0, description="Optional radius in km"),
+    category: Optional[str] = Query(None, description="Filter by incident category"),
+    db = Depends(get_db),
+):
+    """Return all currently active incidents, optionally filtered by geographic radius or category."""
+    _validate_coords(lat, lng)
+
+    query = {"is_active": {"$in": [1, True]}}
+    if category:
+        query["category"] = category
+
+    has_geo_filter = lat is not None and lng is not None and radius is not None
+
+    if has_geo_filter:
+        deg_lat = radius / 111.0
+        cos_lat = max(0.01, math.cos(math.radians(lat)))
+        deg_lng = radius / (111.0 * cos_lat)
+        query["lat"] = {"$gte": lat - deg_lat, "$lte": lat + deg_lat}
+        query["lng"] = {"$gte": lng - deg_lng, "$lte": lng + deg_lng}
+
+    incidents_cursor = db.incidents.find(query)
+    incidents = await incidents_cursor.to_list(length=300)
+
     result = []
     for inc in incidents:
+        # Haversine precise circular filtering when geo-bounds were provided
+        if has_geo_filter:
+            inc_lat = inc.get("lat")
+            inc_lng = inc.get("lng")
+            if inc_lat is None or inc_lng is None:
+                continue
+            try:
+                dist = haversine_km(lat, lng, float(inc_lat), float(inc_lng))
+                if dist > radius:
+                    continue
+            except (ValueError, TypeError):
+                continue
+
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
         inc["confidence"] = _confidence_from_verifications(verif)
         result.append(IncidentOut.from_mongo_doc(inc, verif))
+
     return result
 
 
@@ -44,6 +108,7 @@ async def create_incident(
     current_user: dict = Depends(get_current_user_optional),
 ):
     """Create a new incident report."""
+    _validate_coords(payload.lat, payload.lng)
     incident_id = f"inc-{uuid.uuid4().hex[:8]}"
 
     reporter_name = "Anonymous"
@@ -51,6 +116,8 @@ async def create_incident(
     if current_user:
         reporter_name = current_user.get("name") or current_user.get("full_name") or "Community Member"
         reporter_user_id = str(current_user.get("_id", ""))
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     inc_doc = {
         "_id": incident_id,
@@ -71,7 +138,7 @@ async def create_incident(
         "ai_assessment": "Pending",
         "map_position_top": "50%",
         "map_position_left": "50%",
-        "reported_at_full": datetime.utcnow(),
+        "reported_at_full": now,
         "is_active": 1,
     }
 
@@ -83,18 +150,54 @@ async def create_incident(
 # does not match the string "stats" as an incident ID.
 @router.get("/stats/summary", response_model=StatsOut)
 @router.get("/stats/summary/", response_model=StatsOut)
-async def get_stats(db = Depends(get_db)):
-    """Aggregated dashboard stats."""
-    active_cursor = db.incidents.find({"is_active": 1})
-    active_incidents = await active_cursor.to_list(length=200)
-    
+async def get_stats(
+    lat: Optional[float] = Query(None, description="Optional center latitude"),
+    lng: Optional[float] = Query(None, description="Optional center longitude"),
+    radius: Optional[float] = Query(None, gt=0, le=1000.0, description="Optional radius in km"),
+    db = Depends(get_db),
+):
+    """Aggregated dashboard stats, optionally filtered by local geographic scope."""
+    _validate_coords(lat, lng)
+
+    query = {"is_active": {"$in": [1, True]}}
+    has_geo_filter = lat is not None and lng is not None and radius is not None
+
+    if has_geo_filter:
+        deg_lat = radius / 111.0
+        cos_lat = max(0.01, math.cos(math.radians(lat)))
+        deg_lng = radius / (111.0 * cos_lat)
+        query["lat"] = {"$gte": lat - deg_lat, "$lte": lat + deg_lat}
+        query["lng"] = {"$gte": lng - deg_lng, "$lte": lng + deg_lng}
+
+    active_cursor = db.incidents.find(query)
+    raw_active = await active_cursor.to_list(length=300)
+
+    active_incidents = []
+    for inc in raw_active:
+        if has_geo_filter:
+            inc_lat = inc.get("lat")
+            inc_lng = inc.get("lng")
+            if inc_lat is None or inc_lng is None:
+                continue
+            try:
+                if haversine_km(lat, lng, float(inc_lat), float(inc_lng)) > radius:
+                    continue
+            except (ValueError, TypeError):
+                continue
+
+        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+        verif = await verif_cursor.to_list(length=500)
+        inc["confidence"] = _confidence_from_verifications(verif)
+        active_incidents.append(inc)
+
     high_conf = [i for i in active_incidents if i.get("confidence", 50) >= 80]
-    
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_reports = await db.incidents.count_documents({
         "reported_at_full": {"$gte": today_start}
     })
-    
+
     verified = 0
     for inc in active_incidents:
         verif_count = await db.verifications.count_documents({
@@ -103,7 +206,7 @@ async def get_stats(db = Depends(get_db)):
         })
         if verif_count >= 1:
             verified += 1
-            
+
     return StatsOut(
         totalActive=len(active_incidents),
         highConfidence=len(high_conf),
@@ -114,25 +217,48 @@ async def get_stats(db = Depends(get_db)):
 
 @router.get("/nearby", response_model=List[IncidentOut])
 @router.get("/nearby/", response_model=List[IncidentOut])
-async def get_nearby_incidents(lat: float, lng: float, radius: float = 5.0, db = Depends(get_db)):
-    """Return active incidents near the provided coordinates (rough bounding box)."""
-    # Simple rough bounding box filter: 1 deg lat/lng is roughly 111km.
-    # radius in km / 111 = radius in degrees
-    deg_radius = radius / 111.0
-    active_cursor = db.incidents.find({
-        "is_active": 1,
-        "lat": {"$gte": lat - deg_radius, "$lte": lat + deg_radius},
-        "lng": {"$gte": lng - deg_radius, "$lte": lng + deg_radius},
-    })
-    incidents = await active_cursor.to_list(length=100)
-    
+async def get_nearby_incidents(
+    lat: float = Query(..., ge=-90.0, le=90.0, description="Center latitude"),
+    lng: float = Query(..., ge=-180.0, le=180.0, description="Center longitude"),
+    radius: float = Query(10.0, gt=0, le=1000.0, description="Radius in km"),
+    category: Optional[str] = Query(None, description="Optional category filter"),
+    db = Depends(get_db),
+):
+    """Return active incidents within the specified circular radius (in km) of the coordinates."""
+    _validate_coords(lat, lng)
+
+    deg_lat = radius / 111.0
+    cos_lat = max(0.01, math.cos(math.radians(lat)))
+    deg_lng = radius / (111.0 * cos_lat)
+
+    query = {
+        "is_active": {"$in": [1, True]},
+        "lat": {"$gte": lat - deg_lat, "$lte": lat + deg_lat},
+        "lng": {"$gte": lng - deg_lng, "$lte": lng + deg_lng},
+    }
+    if category:
+        query["category"] = category
+
+    active_cursor = db.incidents.find(query)
+    incidents = await active_cursor.to_list(length=200)
+
     result = []
     for inc in incidents:
-        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
-        verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
-        result.append(IncidentOut.from_mongo_doc(inc, verif))
-    
+        inc_lat = inc.get("lat")
+        inc_lng = inc.get("lng")
+        if inc_lat is None or inc_lng is None:
+            continue
+        try:
+            dist = haversine_km(lat, lng, float(inc_lat), float(inc_lng))
+        except (ValueError, TypeError):
+            continue
+
+        if dist <= radius:
+            verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+            verif = await verif_cursor.to_list(length=500)
+            inc["confidence"] = _confidence_from_verifications(verif)
+            result.append(IncidentOut.from_mongo_doc(inc, verif))
+
     return sorted(result, key=lambda x: x.confidence, reverse=True)
 
 
@@ -140,9 +266,9 @@ async def get_nearby_incidents(lat: float, lng: float, radius: float = 5.0, db =
 @router.get("/notifications/", response_model=List[IncidentOut])
 async def get_notifications(db = Depends(get_db)):
     """Return high-priority active incidents for notifications (confidence >= 70)."""
-    active_cursor = db.incidents.find({"is_active": 1})
+    active_cursor = db.incidents.find({"is_active": {"$in": [1, True]}})
     incidents = await active_cursor.to_list(length=200)
-    
+
     result = []
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
@@ -151,7 +277,7 @@ async def get_notifications(db = Depends(get_db)):
         if conf >= 70:
             inc["confidence"] = conf
             result.append(IncidentOut.from_mongo_doc(inc, verif))
-            
+
     return sorted(result, key=lambda x: x.reportedTimeFull, reverse=True)
 
 
@@ -162,9 +288,9 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     inc = await db.incidents.find_one({"id": incident_id})
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-        
+
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
-    
+
     inc["confidence"] = _confidence_from_verifications(verif)
     return IncidentOut.from_mongo_doc(inc, verif)

@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet';
 import { fetchNearbyIncidents } from '../api/incidents';
 import { CATEGORY_STYLES } from '../data/mockData';
+import { useAppLocation } from '../context/LocationContext';
 import './NearbyIncidentsPage.css';
 
 // Fix Leaflet default icon paths
@@ -27,129 +28,134 @@ function makePinIcon(color, icon) {
 /** User location marker — blue pulsing dot */
 const USER_ICON = L.divIcon({
   className: '',
-  html: `<div class="user-location-pin"></div>`,
+  html: `<div class="user-location-pin" title="Your location"></div>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
 
-function FitBounds({ userPos, incidents }) {
+/** Custom searched location marker */
+const SEARCHED_ICON = L.divIcon({
+  className: '',
+  html: `<div class="searched-location-pin" title="Searched location"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 24],
+  popupAnchor: [0, -24],
+});
+
+/** Keeps the map smoothly updated when coordinates change */
+function MapController({ center, zoom = 13 }) {
   const map = useMap();
   useEffect(() => {
-    const pts = [];
-    if (userPos) pts.push([userPos.lat, userPos.lng]);
-    incidents.forEach((inc) => pts.push([inc.coords.lat, inc.coords.lng]));
-    if (pts.length > 0) map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
-  }, [userPos, incidents, map]);
+    if (center && !isNaN(center[0]) && !isNaN(center[1])) {
+      map.flyTo(center, zoom, { duration: 1.0 });
+    }
+  }, [center, zoom, map]);
   return null;
 }
 
 export default function NearbyIncidentsPage() {
+  const navigate = useNavigate();
+  const {
+    selectedLocation,
+    deviceLocation,
+    isLocating,
+    requestDeviceLocation,
+    resetToDeviceLocation,
+  } = useAppLocation();
+
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [locating, setLocating] = useState(false);
-  
-  // Use cached location or Indore default for instant 0ms mount
-  const [userPos, setUserPos] = useState(() => {
-    try {
-      const lat = parseFloat(sessionStorage.getItem('its_lat') || '');
-      const lng = parseFloat(sessionStorage.getItem('its_lng') || '');
-      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
-    } catch {
-      // fallback
-    }
-    return { lat: 22.7196, lng: 75.8577 };
-  });
 
-  const navigate = useNavigate();
+  const activeLat = selectedLocation.lat;
+  const activeLng = selectedLocation.lng;
+  const isCustomLoc = selectedLocation.isCustom;
 
   const loadIncidents = useCallback(async (lat, lng) => {
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
     setLoading(true);
+    setError('');
     try {
       const data = await fetchNearbyIncidents(lat, lng, 10);
-      setIncidents(data || []);
+      setIncidents(Array.isArray(data) ? data : []);
     } catch {
       setError('Failed to fetch nearby incidents from the server.');
+      setIncidents([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleFindNearby = useCallback(() => {
-    setLocating(true);
-    setError('');
-
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser.');
-      setLocating(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setUserPos({ lat: latitude, lng: longitude });
-        try {
-          sessionStorage.setItem('its_lat', String(latitude));
-          sessionStorage.setItem('its_lng', String(longitude));
-        } catch {
-          // ignore
-        }
-        setLocating(false);
-        loadIncidents(latitude, longitude);
-      },
-      () => {
-        // If GPS is denied or unavailable, still load default position
-        setLocating(false);
-        loadIncidents(userPos.lat, userPos.lng);
-      },
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  }, [loadIncidents, userPos.lat, userPos.lng]);
-
-  // Load incidents immediately on mount with initial position (instant render)
+  // Fetch incidents whenever active coordinates change
   useEffect(() => {
-    loadIncidents(userPos.lat, userPos.lng);
-    // Background location check (non-blocking)
-    if (navigator.geolocation && !sessionStorage.getItem('its_lat')) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          setUserPos({ lat: latitude, lng: longitude });
-          try {
-            sessionStorage.setItem('its_lat', String(latitude));
-            sessionStorage.setItem('its_lng', String(longitude));
-          } catch {
-            // ignore
-          }
-          loadIncidents(latitude, longitude);
-        },
-        () => {},
-        { timeout: 4000, maximumAge: 60000 }
-      );
-    }
-  }, []);
+    loadIncidents(activeLat, activeLng);
+  }, [loadIncidents, activeLat, activeLng]);
+
+  const handleRefreshLocation = () => {
+    requestDeviceLocation(true);
+  };
+
+  const centerCoord = [activeLat, activeLng];
 
   return (
     <div className="nearby-page">
       <div className="page-header">
-        <h2>Nearby Incidents</h2>
-        <p>Active traffic disruptions within a 10 km radius of your location.</p>
-        <button
-          className="btn-refresh"
-          onClick={handleFindNearby}
-          disabled={locating || loading}
-        >
-          {locating ? 'Locating...' : loading ? 'Fetching...' : '↻ Refresh Location'}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2>Nearby Incidents</h2>
+            <p>
+              Active traffic disruptions within a 10 km radius of{' '}
+              <b>{isCustomLoc ? selectedLocation.label : (deviceLocation?.locality || 'your location')}</b>.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {isCustomLoc && deviceLocation && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={resetToDeviceLocation}
+                style={{ padding: '8px 14px' }}
+              >
+                📍 Use My Location
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-refresh"
+              onClick={handleRefreshLocation}
+              disabled={isLocating || loading}
+            >
+              {isLocating ? 'Locating…' : loading ? 'Fetching…' : '↻ Refresh Location'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {error && <div className="error-state">{error}</div>}
+      {error && (
+        <div className="error-state" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => loadIncidents(activeLat, activeLng)}
+            style={{
+              background: 'none',
+              border: '1px solid currentColor',
+              borderRadius: 6,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              color: 'inherit',
+              fontWeight: 600,
+            }}
+          >
+            ↻ Retry
+          </button>
+        </div>
+      )}
 
       {/* ── OSM Map ── */}
       <div className="nearby-map-wrap">
         <MapContainer
-          center={[userPos.lat, userPos.lng]}
+          center={centerCoord}
           zoom={13}
           style={{ width: '100%', height: '100%' }}
           zoomControl={true}
@@ -160,21 +166,37 @@ export default function NearbyIncidentsPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
 
-          <FitBounds userPos={userPos} incidents={incidents} />
+          <MapController center={centerCoord} zoom={13} />
 
-          {/* User location marker + radius */}
-          <Marker position={[userPos.lat, userPos.lng]} icon={USER_ICON}>
-            <Popup>📍 Your location</Popup>
+          {/* User location marker or Searched center marker */}
+          <Marker
+            position={centerCoord}
+            icon={isCustomLoc ? SEARCHED_ICON : USER_ICON}
+          >
+            <Popup>
+              <strong>{isCustomLoc ? '📍 Selected Search Area' : '📍 Your Location'}</strong>
+              <p>{selectedLocation.label}</p>
+            </Popup>
           </Marker>
+
+          {/* 10 km radius circle around the active query coordinates */}
           <Circle
-            center={[userPos.lat, userPos.lng]}
+            center={centerCoord}
             radius={10000}
-            pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.05, weight: 1.5, dashArray: '6 4' }}
+            pathOptions={{
+              color: '#2563eb',
+              fillColor: '#2563eb',
+              fillOpacity: 0.05,
+              weight: 1.5,
+              dashArray: '6 4',
+            }}
           />
 
           {/* Incident pins */}
           {incidents.map((inc) => {
             const style = CATEGORY_STYLES[inc.category] ?? CATEGORY_STYLES.Other;
+            if (inc.coords?.lat == null || inc.coords?.lng == null) return null;
+
             return (
               <Marker
                 key={inc.id}
@@ -184,11 +206,12 @@ export default function NearbyIncidentsPage() {
                 <Popup>
                   <div className="osm-popup">
                     <strong>{style.icon} {inc.category}</strong>
-                    <p>{inc.fullLocation}</p>
+                    <p>{inc.fullLocation || inc.location}</p>
                     <p className="osm-popup-meta">
                       Severity: <b>{inc.severity}</b> &nbsp;|&nbsp; Conf: <b>{inc.confidence}%</b>
                     </p>
                     <button
+                      type="button"
                       className="osm-popup-link"
                       onClick={() => navigate(`/app/incidents/${inc.id}`)}
                     >
@@ -203,10 +226,13 @@ export default function NearbyIncidentsPage() {
       </div>
 
       {/* ── Incident cards ── */}
-      {incidents.length === 0 && !loading && !locating ? (
+      {incidents.length === 0 && !loading && !isLocating && !error ? (
         <div className="empty-state">
           <h3>✅ All clear!</h3>
-          <p>We couldn't find any active incidents within 10 km of your location.</p>
+          <p>
+            We couldn't find any active incidents within 10 km of{' '}
+            {isCustomLoc ? selectedLocation.label : 'your current location'}.
+          </p>
         </div>
       ) : (
         <div className="nearby-grid">
@@ -224,13 +250,13 @@ export default function NearbyIncidentsPage() {
                   </div>
                   <div>
                     <h4>{inc.category}</h4>
-                    <span className={`nearby-severity severity-${inc.severity.toLowerCase()}`}>
+                    <span className={`nearby-severity severity-${(inc.severity || 'medium').toLowerCase()}`}>
                       {inc.severity} Severity
                     </span>
                   </div>
                 </div>
                 <div className="nearby-card-body">
-                  <p className="nearby-loc">📍 {inc.fullLocation}</p>
+                  <p className="nearby-loc">📍 {inc.fullLocation || inc.location}</p>
                   <p className="nearby-desc">{inc.description}</p>
                 </div>
                 <div className="nearby-card-footer">
