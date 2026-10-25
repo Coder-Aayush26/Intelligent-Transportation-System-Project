@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..database import get_db
 from ..schemas import IncidentCreate, IncidentOut, StatsOut
-from ..auth import get_current_user_optional
+from ..auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -113,9 +113,11 @@ async def create_incident(
 
     reporter_name = "Anonymous"
     reporter_user_id = None
+    reporter_email = None
     if current_user:
         reporter_name = current_user.get("name") or current_user.get("full_name") or "Community Member"
-        reporter_user_id = str(current_user.get("_id", ""))
+        reporter_user_id = str(current_user.get("_id", current_user.get("id", "")))
+        reporter_email = current_user.get("email")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -132,6 +134,8 @@ async def create_incident(
         "description": payload.description,
         "reporter": reporter_name,
         "user_id": reporter_user_id,
+        "reporter_id": reporter_user_id,
+        "user_email": reporter_email,
         "source": payload.source or "Web App",
         "media_urls": payload.media_urls,
         "media_count": len(payload.media_urls),
@@ -279,6 +283,49 @@ async def get_notifications(db = Depends(get_db)):
             result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return sorted(result, key=lambda x: x.reportedTimeFull, reverse=True)
+
+
+@router.get("/my", response_model=List[IncidentOut])
+@router.get("/my/", response_model=List[IncidentOut])
+@router.get("/user/me", response_model=List[IncidentOut])
+@router.get("/user/me/", response_model=List[IncidentOut])
+async def get_my_incidents(
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return all incidents reported by the authenticated user, sorted newest first."""
+    user_id_str = str(current_user.get("_id", ""))
+    user_id_alt = str(current_user.get("id", ""))
+    user_name = current_user.get("name", "")
+    user_fullname = current_user.get("full_name", "")
+    user_email = current_user.get("email", "")
+
+    or_conditions = []
+    if user_id_str:
+        or_conditions.extend([{"user_id": user_id_str}, {"reporter_id": user_id_str}])
+    if user_id_alt and user_id_alt != user_id_str:
+        or_conditions.extend([{"user_id": user_id_alt}, {"reporter_id": user_id_alt}])
+    if user_name:
+        or_conditions.append({"reporter": user_name})
+    if user_fullname and user_fullname != user_name:
+        or_conditions.append({"reporter": user_fullname})
+    if user_email:
+        or_conditions.append({"user_email": user_email})
+
+    if not or_conditions:
+        return []
+
+    incidents_cursor = db.incidents.find({"$or": or_conditions}).sort("reported_at_full", -1)
+    incidents = await incidents_cursor.to_list(length=300)
+
+    result = []
+    for inc in incidents:
+        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+        verif = await verif_cursor.to_list(length=500)
+        inc["confidence"] = _confidence_from_verifications(verif)
+        result.append(IncidentOut.from_mongo_doc(inc, verif))
+
+    return result
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)

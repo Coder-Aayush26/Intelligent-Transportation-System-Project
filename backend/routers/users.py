@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..database import get_db
 from ..auth import get_current_user
-from ..schemas import UserOut, UserProfileUpdate, UserSettingsUpdate, UserLocationUpdate, _relative_time
+from ..schemas import UserOut, UserProfileUpdate, UserSettingsUpdate, UserLocationUpdate, IncidentOut, _relative_time
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -29,10 +29,25 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 
 async def _build_user_out(user: dict, db) -> UserOut:
     user_id_str = str(user.get("_id", ""))
+    user_id_alt = str(user.get("id", ""))
     user_name = user.get("name", "")
+    user_fullname = user.get("full_name", "")
+    user_email = user.get("email", "")
 
     # Count actual reports submitted
-    report_filter = {"$or": [{"reporter": user_name}, {"reporter_id": user_id_str}]}
+    report_or = []
+    if user_id_str:
+        report_or.extend([{"user_id": user_id_str}, {"reporter_id": user_id_str}])
+    if user_id_alt and user_id_alt != user_id_str:
+        report_or.extend([{"user_id": user_id_alt}, {"reporter_id": user_id_alt}])
+    if user_name:
+        report_or.append({"reporter": user_name})
+    if user_fullname and user_fullname != user_name:
+        report_or.append({"reporter": user_fullname})
+    if user_email:
+        report_or.append({"user_email": user_email})
+
+    report_filter = {"$or": report_or} if report_or else {"_id": "none"}
     total_reports = await db.incidents.count_documents(report_filter)
 
     # Count actual verifications submitted
@@ -250,3 +265,50 @@ async def update_location(
         {"$set": {"last_known_location": loc_record}}
     )
     return {"status": "ok", "location": loc_record}
+
+
+def _calc_conf(verif_list) -> int:
+    confirmations = sum(1 for v in verif_list if v.get("verdict") == "confirm")
+    contradictions = sum(1 for v in verif_list if v.get("verdict") == "contradict")
+    return max(5, min(99, 50 + confirmations * 5 - contradictions * 8))
+
+
+@router.get("/me/reports", response_model=List[IncidentOut])
+@router.get("/me/reports/", response_model=List[IncidentOut])
+async def get_my_reports(
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return all incidents reported by current authenticated user."""
+    user_id_str = str(current_user.get("_id", ""))
+    user_id_alt = str(current_user.get("id", ""))
+    user_name = current_user.get("name", "")
+    user_fullname = current_user.get("full_name", "")
+    user_email = current_user.get("email", "")
+
+    report_or = []
+    if user_id_str:
+        report_or.extend([{"user_id": user_id_str}, {"reporter_id": user_id_str}])
+    if user_id_alt and user_id_alt != user_id_str:
+        report_or.extend([{"user_id": user_id_alt}, {"reporter_id": user_id_alt}])
+    if user_name:
+        report_or.append({"reporter": user_name})
+    if user_fullname and user_fullname != user_name:
+        report_or.append({"reporter": user_fullname})
+    if user_email:
+        report_or.append({"user_email": user_email})
+
+    if not report_or:
+        return []
+
+    incidents_cursor = db.incidents.find({"$or": report_or}).sort("reported_at_full", -1)
+    incidents = await incidents_cursor.to_list(length=300)
+
+    result = []
+    for inc in incidents:
+        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+        verif = await verif_cursor.to_list(length=500)
+        inc["confidence"] = _calc_conf(verif)
+        result.append(IncidentOut.from_mongo_doc(inc, verif))
+
+    return result

@@ -13,6 +13,7 @@ import PlaceholderPage from './pages/PlaceholderPage';
 import NotificationsPage from './pages/NotificationsPage';
 import NearbyIncidentsPage from './pages/NearbyIncidentsPage';
 import SettingsPage from './pages/SettingsPage';
+import MyReportsPage from './pages/MyReportsPage';
 
 export default function App() {
   return (
@@ -41,10 +42,7 @@ export default function App() {
         <Route path="nearby" element={<NearbyIncidentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
 
-        <Route
-          path="reports"
-          element={<PlaceholderPage title="My Reports" description="A history of incidents you've reported, with their current verification status." />}
-        />
+        <Route path="reports" element={<MyReportsPage />} />
         <Route
           path="favorites"
           element={<PlaceholderPage title="Favorites" description="Routes and locations you're watching for incident updates." />}

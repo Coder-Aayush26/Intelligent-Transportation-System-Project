@@ -68,3 +68,9 @@ export function fetchNearbyIncidents(lat, lng, radius = 10, category = null) {
 export function fetchNotifications() {
   return apiFetch('/incidents/notifications');
 }
+
+/** Fetch incidents reported by the currently authenticated user. */
+export function fetchMyReports() {
+  return apiFetch('/incidents/my', { noCache: true });
+}
+
