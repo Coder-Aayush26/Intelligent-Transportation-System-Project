@@ -573,7 +573,7 @@ function AboutVisual() {
         </div>
 
         {/* Card 2 */}
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', transform: 'translateY(20px)' }}>
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{ background: '#f0fdf4', padding: '8px', borderRadius: '8px' }}>
               <CheckCircle size={18} color="#16a34a" />
