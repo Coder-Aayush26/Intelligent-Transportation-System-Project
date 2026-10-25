@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './AuthPage.css';
 
@@ -34,7 +35,15 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">🚦 ITS</div>
+        <div className="auth-header">
+          <Link to="/" className="auth-back-btn" title="Back to Home">
+            <ArrowLeft size={16} />
+            <span>Back to Home</span>
+          </Link>
+          <Link to="/" className="auth-logo-link" title="ITS Home">
+            <span className="auth-logo">🚦 ITS</span>
+          </Link>
+        </div>
         <h1 className="auth-title">Welcome back</h1>
         <p className="auth-sub">Sign in with your Login ID or Email to continue.</p>
 
