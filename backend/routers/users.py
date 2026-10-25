@@ -27,27 +27,6 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 }
 
 
-<<<<<<< HEAD
-@router.get("/me", response_model=UserOut)
-@router.get("/me/", response_model=UserOut)
-async def get_me(
-    current_user: dict = Depends(get_current_user),
-    db = Depends(get_db),
-):
-    """Return the currently logged-in user's profile."""
-    user = current_user
-    user_name = user.get("name")
-    user_id = str(user.get("_id", ""))
-
-    # Build recent activity from actual incident reports
-    incidents_cursor = db.incidents.find({
-        "$or": [
-            {"user_id": user_id},
-            {"reporter": user_name},
-        ]
-    }).sort("reported_at_full", -1).limit(10)
-    incidents = await incidents_cursor.to_list(length=10)
-=======
 async def _build_user_out(user: dict, db) -> UserOut:
     user_id_str = str(user.get("_id", ""))
     user_name = user.get("name", "")
@@ -55,7 +34,6 @@ async def _build_user_out(user: dict, db) -> UserOut:
     # Count actual reports submitted
     report_filter = {"$or": [{"reporter": user_name}, {"reporter_id": user_id_str}]}
     total_reports = await db.incidents.count_documents(report_filter)
->>>>>>> 86a0a02195a86a90e0da9174430fa834262b53a6
 
     # Count actual verifications submitted
     verif_filter = {"$or": [{"user_id": user_id_str}, {"user_name": user_name}]}
@@ -132,15 +110,9 @@ async def _build_user_out(user: dict, db) -> UserOut:
         merged_settings["categories"] = {**DEFAULT_SETTINGS["categories"], **stored_settings["categories"]}
 
     return UserOut(
-<<<<<<< HEAD
-        id=user_id,
-        name=user.get("name", ""),
-        fullName=user.get("full_name", user.get("name", "")),
-=======
         id=user_id_str,
         name=user_name,
         fullName=user.get("full_name") or user_name,
->>>>>>> 86a0a02195a86a90e0da9174430fa834262b53a6
         email=user.get("email", ""),
         avatarUrl=user.get("avatar_url") or user.get("avatarUrl") or None,
         memberSince=user.get("member_since", ""),
@@ -155,6 +127,7 @@ async def _build_user_out(user: dict, db) -> UserOut:
 
 
 @router.get("/me", response_model=UserOut)
+@router.get("/me/", response_model=UserOut)
 async def get_me(
     current_user: dict = Depends(get_current_user),
     db = Depends(get_db),
