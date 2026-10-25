@@ -118,11 +118,7 @@ class UserLocationUpdate(BaseModel):
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-<<<<<<< HEAD
-    id: Any = 0
-=======
     id: Any = "0"
->>>>>>> 86a0a02195a86a90e0da9174430fa834262b53a6
     name: str
     fullName: str = ""
     email: str

@@ -33,6 +33,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="live-map" element={<DashboardPage />} />
         <Route path="report" element={<ReportIncidentPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />

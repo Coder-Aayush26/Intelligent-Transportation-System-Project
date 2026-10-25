@@ -67,29 +67,21 @@ async def get_current_user(
 
     # If session_id is present, verify active session in MongoDB
     if session_id:
-        session = await db.sessions.find_one({
-            "session_id": session_id,
-            "is_active": {"$ne": False}
-        })
+        session = await db.sessions.find_one({"session_id": session_id, "is_active": True})
         if not session:
-            # Auto-heal session if JWT signature is valid and active
-            now = datetime.utcnow()
-            await db.sessions.insert_one({
-                "_id": session_id,
-                "session_id": session_id,
-                "user_id": str(user_id),
-                "email": payload.get("email", ""),
-                "name": payload.get("name", ""),
-                "created_at": now,
-                "last_active": now,
-                "is_active": True,
-            })
-        else:
-            # Touch last_active
-            await db.sessions.update_one(
-                {"session_id": session_id},
-                {"$set": {"last_active": datetime.utcnow()}}
+            session = await db.sessions.find_one({"session_id": session_id})
+            if session and session.get("is_active") is False:
+                session = None
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your session has ended. Please log in again."
             )
+        # Touch last_active
+        await db.sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"last_active": datetime.utcnow()}}
+        )
 
     # Look up user by string _id, ObjectId, id, or email
     user = await db.users.find_one({"_id": user_id})

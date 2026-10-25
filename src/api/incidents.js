@@ -1,8 +1,21 @@
 import { apiFetch } from './client';
 
-/** Fetch all active incidents from the backend. */
-export function fetchIncidents() {
-  return apiFetch('/incidents/');
+/**
+ * Fetch all active incidents from the backend, optionally filtered by
+ * location bounds or category.
+ */
+export function fetchIncidents(params = {}) {
+  const query = new URLSearchParams();
+  if (params.lat != null && params.lng != null && params.radius != null) {
+    query.set('lat', String(params.lat));
+    query.set('lng', String(params.lng));
+    query.set('radius', String(params.radius));
+  }
+  if (params.category) {
+    query.set('category', params.category);
+  }
+  const qs = query.toString();
+  return apiFetch(`/incidents/${qs ? `?${qs}` : ''}`);
 }
 
 /** Fetch a single incident by id. */
@@ -26,14 +39,29 @@ export function verifyIncident(id, verdict) {
   });
 }
 
-/** Fetch dashboard stats. */
-export function fetchStats() {
-  return apiFetch('/incidents/stats/summary');
+/** Fetch dashboard stats (optionally local to a geographic area). */
+export function fetchStats(params = {}) {
+  const query = new URLSearchParams();
+  if (params.lat != null && params.lng != null && params.radius != null) {
+    query.set('lat', String(params.lat));
+    query.set('lng', String(params.lng));
+    query.set('radius', String(params.radius));
+  }
+  const qs = query.toString();
+  return apiFetch(`/incidents/stats/summary${qs ? `?${qs}` : ''}`);
 }
 
-/** Fetch nearby incidents based on user location. */
-export function fetchNearbyIncidents(lat, lng, radius = 5) {
-  return apiFetch(`/incidents/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+/** Fetch nearby incidents based on user or searched location within radius km. */
+export function fetchNearbyIncidents(lat, lng, radius = 10, category = null) {
+  const query = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    radius: String(radius),
+  });
+  if (category) {
+    query.set('category', category);
+  }
+  return apiFetch(`/incidents/nearby?${query.toString()}`);
 }
 
 /** Fetch high-priority notifications. */

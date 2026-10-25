@@ -25,15 +25,12 @@ export function AuthProvider({ children }) {
     } else {
       localStorage.removeItem('its_token');
       localStorage.removeItem('its_user');
-<<<<<<< HEAD
-=======
       try {
         sessionStorage.removeItem('its_lat');
         sessionStorage.removeItem('its_lng');
       } catch {
         // ignore
       }
->>>>>>> 86a0a02195a86a90e0da9174430fa834262b53a6
       clearApiCache();
     }
   };

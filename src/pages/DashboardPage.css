@@ -1,11 +1,68 @@
 /* ── Dashboard Grid ──────────────────────────────────────────── */
 .dash-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 340px;
   gap: 20px;
   animation: fadeUp 0.5s ease;
 }
 
 @media (max-width: 1100px) {
   .dash-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Banners ─────────────────────────────────────────────────── */
+.dash-error-banner {
+  background: var(--red-light, #fef2f2);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--red, #dc2626);
+  font-size: 13px;
+  font-weight: 500;
+}
+.dash-retry-btn {
+  background: var(--red, #dc2626);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.dash-retry-btn:hover {
+  opacity: 0.9;
+}
+
+.dash-info-banner {
+  background: #eff6ff;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+.dash-dismiss-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+.dash-dismiss-btn:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.05);
 }
