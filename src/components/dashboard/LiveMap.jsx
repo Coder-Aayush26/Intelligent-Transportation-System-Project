@@ -59,31 +59,13 @@ function MapController({ center, zoom = 13 }) {
   return null;
 }
 
-/** Custom on-map zoom buttons */
-function MapZoomButtons() {
+/** Bridge component inside MapContainer to capture the Leaflet map instance safely */
+function MapInstanceBridge({ onMapReady }) {
   const map = useMap();
-  return (
-    <div className="map-zoom-btns">
-      <button
-        type="button"
-        className="map-ctrl-btn"
-        onClick={() => map.zoomIn()}
-        aria-label="Zoom in"
-        title="Zoom in"
-      >
-        <Plus size={15} />
-      </button>
-      <button
-        type="button"
-        className="map-ctrl-btn"
-        onClick={() => map.zoomOut()}
-        aria-label="Zoom out"
-        title="Zoom out"
-      >
-        <Minus size={15} />
-      </button>
-    </div>
-  );
+  useEffect(() => {
+    if (map) onMapReady(map);
+  }, [map, onMapReady]);
+  return null;
 }
 
 const SEVERITY_OPTIONS = ['All', 'Critical', 'High', 'Medium', 'Low'];
@@ -105,6 +87,9 @@ export default function LiveMap({
     deviceLocation, 
     resetToDeviceLocation 
   } = useAppLocation();
+
+  // Reference to Leaflet map instance captured from inside MapContainer
+  const [mapInstance, setMapInstance] = useState(null);
 
   // Show/Hide markers state (local fallback if not controlled)
   const [localIncidentsVisible, setLocalIncidentsVisible] = useState(true);
@@ -261,8 +246,27 @@ export default function LiveMap({
             )}
           </button>
 
-          {/* Zoom controls */}
-          <MapZoomButtons />
+          {/* Zoom controls (safely invoking mapInstance without useMap hook) */}
+          <div className="map-zoom-btns">
+            <button
+              type="button"
+              className="map-ctrl-btn"
+              onClick={() => mapInstance?.zoomIn()}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <Plus size={15} />
+            </button>
+            <button
+              type="button"
+              className="map-ctrl-btn"
+              onClick={() => mapInstance?.zoomOut()}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <Minus size={15} />
+            </button>
+          </div>
         </div>
 
         {/* ── Notice Banner if markers are hidden ── */}
@@ -405,6 +409,9 @@ export default function LiveMap({
 
           {/* Dynamic map center controller */}
           <MapController center={centerCoord} zoom={13} />
+
+          {/* Bridge to expose Leaflet map instance to outer toolbar */}
+          <MapInstanceBridge onMapReady={setMapInstance} />
 
           {/* Device location pin and accuracy circle if available */}
           {deviceLocation && (
