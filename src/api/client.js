@@ -20,8 +20,9 @@ async function execFetch(url, options, headers) {
 
 export async function apiFetch(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const token = localStorage.getItem('its_token');
-  const cacheKey = `${token ? 'auth' : 'anon'}:${path}`;
+  // Normalize path: ensure single leading slash and strip trailing slashes before query params or string end
+  const cleanPath = (path.startsWith('/') ? path : `/${path}`).replace(/\/+(\?|$)/, '$1');
+  const cacheKey = `${token ? 'auth' : 'anon'}:${cleanPath}`;
   const now = Date.now();
 
   // Clear cache on write operations (POST, PUT, DELETE) so subsequent GETs get fresh data
@@ -43,7 +44,8 @@ export async function apiFetch(path, options = {}) {
     ...options.headers,
   };
 
-  const primaryUrl = `${BASE}${path}`;
+  const primaryUrl = `${BASE}${cleanPath}`;
+  const cloudUrl = `${CLOUD_API_ORIGIN}/api${cleanPath}`;
   let res;
   const maxAttempts = 3;
 
@@ -51,43 +53,43 @@ export async function apiFetch(path, options = {}) {
     try {
       res = await execFetch(primaryUrl, options, headers);
     } catch {
-      // In dev, if local connection fails on attempt 1, try cloud backend directly
-      if (import.meta.env.DEV && attempt === 1) {
-        try {
-          res = await execFetch(`${CLOUD_API_ORIGIN}/api${path}`, options, headers);
-          if (res.ok) break;
-        } catch {
-          // ignore and retry
+      // If primary fetch fails (network error, CORS, or dead proxy), try cloud backend directly
+      try {
+        const cloudRes = await execFetch(cloudUrl, options, headers);
+        if (cloudRes.ok) {
+          res = cloudRes;
+          break;
         }
+      } catch {
+        // ignore and proceed to retry
       }
+
       if (attempt === maxAttempts) {
         if (cache.has(cacheKey)) {
           return cache.get(cacheKey).data;
         }
         throw new Error('Unable to connect to the server. Please check your network connection.');
       }
-      await new Promise((r) => setTimeout(r, 1200 * attempt));
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
       continue;
     }
 
-    // If 502 (Bad Gateway) or 504 (Gateway Timeout)
-    if (res.status === 502 || res.status === 504) {
-      // In dev, if local proxy returned 502 because local backend was not running, try cloud backend
-      if (import.meta.env.DEV && attempt === 1) {
-        try {
-          const cloudRes = await execFetch(`${CLOUD_API_ORIGIN}/api${path}`, options, headers);
-          if (cloudRes.status !== 502 && cloudRes.status !== 504) {
-            res = cloudRes;
-            break;
-          }
-        } catch {
-          // continue to retry
+    // If 502 (Bad Gateway), 504 (Gateway Timeout), or 404 (proxy rewrite mismatch)
+    if (res.status === 502 || res.status === 504 || res.status === 404) {
+      // If primary returned a gateway/proxy error, attempt cloud backend directly
+      try {
+        const cloudRes = await execFetch(cloudUrl, options, headers);
+        if (cloudRes.ok) {
+          res = cloudRes;
+          break;
         }
+      } catch {
+        // continue to retry
       }
 
       // If server is waking up on Render (free-tier cold start), wait and retry
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
         continue;
       }
     }

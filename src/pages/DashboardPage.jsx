@@ -16,7 +16,6 @@ const EMPTY_STATS = [
 
 export default function DashboardPage() {
   const { 
-    selectedLocation, 
     permissionState, 
     locationError, 
     clearLocationError 
@@ -34,17 +33,26 @@ export default function DashboardPage() {
     return initial;
   });
 
+  const [activeSeverity, setActiveSeverity] = useState('All');
+  const [incidentsVisible, setIncidentsVisible] = useState(true);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [incData, statsData] = await Promise.all([
+      const [incResult, statsResult] = await Promise.allSettled([
         fetchIncidents(),
         fetchStats(),
       ]);
 
-      const incList = Array.isArray(incData) ? incData : [];
+      if (incResult.status === 'rejected') {
+        throw incResult.reason || new Error('Failed to load incident records from server.');
+      }
+
+      const incList = Array.isArray(incResult.value) ? incResult.value : [];
       setIncidents(incList);
+
+      const statsData = statsResult.status === 'fulfilled' ? statsResult.value : null;
 
       // Derive metrics accurately from real incident data + stats endpoint
       const highConfCount = incList.filter((i) => (i.confidence || 0) >= 80).length;
@@ -93,13 +101,25 @@ export default function DashboardPage() {
     }));
   };
 
+  const handleResetCategories = () => {
+    const allActive = {};
+    mapLegend.forEach((item) => { allActive[item.label] = true; });
+    setActiveCategories(allActive);
+    setActiveSeverity('All');
+  };
+
   // Filter incidents for display in both LiveMap and ActiveIncidentsPanel
   const filteredIncidents = useMemo(() => {
     return incidents.filter((inc) => {
       const cat = inc.category || 'Other';
-      return activeCategories[cat] !== false;
+      if (activeCategories[cat] === false) return false;
+      if (activeSeverity !== 'All') {
+        const incSev = (inc.severity || 'Medium').toLowerCase();
+        if (incSev !== activeSeverity.toLowerCase()) return false;
+      }
+      return true;
     });
-  }, [incidents, activeCategories]);
+  }, [incidents, activeCategories, activeSeverity]);
 
   return (
     <div className="dashboard-container">
@@ -133,10 +153,15 @@ export default function DashboardPage() {
       <div className="dash-grid">
         <div>
           <LiveMap
-            incidents={filteredIncidents}
+            incidents={incidents}
             loading={loading}
             activeCategories={activeCategories}
             onToggleCategory={handleToggleCategory}
+            onResetCategories={handleResetCategories}
+            activeSeverity={activeSeverity}
+            onSelectSeverity={setActiveSeverity}
+            incidentsVisible={incidentsVisible}
+            onToggleIncidentsVisible={setIncidentsVisible}
           />
           <StatsRow stats={stats} />
         </div>

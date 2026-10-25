@@ -15,7 +15,7 @@ export function fetchIncidents(params = {}) {
     query.set('category', params.category);
   }
   const qs = query.toString();
-  return apiFetch(`/incidents/${qs ? `?${qs}` : ''}`);
+  return apiFetch(`/incidents${qs ? `?${qs}` : ''}`);
 }
 
 /** Fetch a single incident by id. */
@@ -25,7 +25,7 @@ export function fetchIncident(id) {
 
 /** Create a new incident report. */
 export function createIncident(payload) {
-  return apiFetch('/incidents/', {
+  return apiFetch('/incidents', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

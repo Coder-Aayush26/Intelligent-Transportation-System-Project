@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Plus, Minus, Navigation } from 'lucide-react';
+import { 
+  Plus, Minus, Eye, EyeOff, Filter, RotateCcw, X, Check
+} from 'lucide-react';
 import { mapLegend, CATEGORY_STYLES } from '../../data/mockData';
 import { useAppLocation } from '../../context/LocationContext';
 import './LiveMap.css';
@@ -58,10 +60,10 @@ function MapController({ center, zoom = 13 }) {
 }
 
 /** Custom on-map zoom buttons */
-function MapControls() {
+function MapZoomButtons() {
   const map = useMap();
   return (
-    <div className="map-controls">
+    <div className="map-zoom-btns">
       <button
         type="button"
         className="map-ctrl-btn"
@@ -69,7 +71,7 @@ function MapControls() {
         aria-label="Zoom in"
         title="Zoom in"
       >
-        <Plus size={16} />
+        <Plus size={15} />
       </button>
       <button
         type="button"
@@ -78,17 +80,24 @@ function MapControls() {
         aria-label="Zoom out"
         title="Zoom out"
       >
-        <Minus size={16} />
+        <Minus size={15} />
       </button>
     </div>
   );
 }
 
+const SEVERITY_OPTIONS = ['All', 'Critical', 'High', 'Medium', 'Low'];
+
 export default function LiveMap({ 
   incidents = [], 
   loading = false, 
   activeCategories = null,
-  onToggleCategory = null 
+  onToggleCategory = null,
+  onResetCategories = null,
+  activeSeverity = 'All',
+  onSelectSeverity = null,
+  incidentsVisible: controlledIncidentsVisible = null,
+  onToggleIncidentsVisible = null,
 }) {
   const navigate = useNavigate();
   const { 
@@ -97,6 +106,14 @@ export default function LiveMap({
     resetToDeviceLocation 
   } = useAppLocation();
 
+  // Show/Hide markers state (local fallback if not controlled)
+  const [localIncidentsVisible, setLocalIncidentsVisible] = useState(true);
+  const incidentsVisible = controlledIncidentsVisible ?? localIncidentsVisible;
+
+  // Filter drawer/panel visibility inside the map
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const filterPanelRef = useRef(null);
+
   // Local category filter state if not controlled externally
   const [localCategories, setLocalCategories] = useState(() => {
     const initial = {};
@@ -104,7 +121,21 @@ export default function LiveMap({
     return initial;
   });
 
+  const [localSeverity, setLocalSeverity] = useState('All');
+  const severityFilter = onSelectSeverity ? activeSeverity : localSeverity;
+
   const categories = activeCategories || localCategories;
+
+  // Listen to external toggle events from Topbar Filters button
+  useEffect(() => {
+    const handleToggleFilters = () => {
+      setIsFilterPanelOpen((prev) => !prev);
+    };
+    window.addEventListener('its-toggle-map-filters', handleToggleFilters);
+    return () => {
+      window.removeEventListener('its-toggle-map-filters', handleToggleFilters);
+    };
+  }, []);
 
   const handleCategoryToggle = (label) => {
     if (onToggleCategory) {
@@ -117,18 +148,59 @@ export default function LiveMap({
     }
   };
 
+  const handleResetFilters = () => {
+    if (onResetCategories) {
+      onResetCategories();
+    } else {
+      const allActive = {};
+      mapLegend.forEach((item) => { allActive[item.label] = true; });
+      setLocalCategories(allActive);
+    }
+    if (onSelectSeverity) {
+      onSelectSeverity('All');
+    } else {
+      setLocalSeverity('All');
+    }
+  };
+
+  const handleToggleVisibility = () => {
+    if (onToggleIncidentsVisible) {
+      onToggleIncidentsVisible(!incidentsVisible);
+    } else {
+      setLocalIncidentsVisible((prev) => !prev);
+    }
+  };
+
   const centerCoord = [selectedLocation.lat, selectedLocation.lng];
 
-  // Filter incidents by enabled categories and ensure valid coordinates
-  const visibleIncidents = incidents.filter((inc) => {
-    const lat = inc.coords?.lat;
-    const lng = inc.coords?.lng;
-    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return false;
-    // Check if category is enabled
-    const cat = inc.category || 'Other';
-    if (categories[cat] === false) return false;
-    return true;
-  });
+  // Count active categories
+  const activeCategoryCount = useMemo(() => {
+    return Object.values(categories).filter(Boolean).length;
+  }, [categories]);
+
+  const hasFilterActive = activeCategoryCount < mapLegend.length || severityFilter !== 'All';
+
+  // Filter incidents by visibility, category, and severity
+  const visibleIncidents = useMemo(() => {
+    if (!incidentsVisible) return [];
+    return incidents.filter((inc) => {
+      const lat = inc.coords?.lat ?? inc.lat;
+      const lng = inc.coords?.lng ?? inc.lng;
+      if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return false;
+
+      // Category check
+      const cat = inc.category || 'Other';
+      if (categories[cat] === false) return false;
+
+      // Severity check
+      if (severityFilter !== 'All') {
+        const incSev = (inc.severity || 'Medium').toLowerCase();
+        if (incSev !== severityFilter.toLowerCase()) return false;
+      }
+
+      return true;
+    });
+  }, [incidents, incidentsVisible, categories, severityFilter]);
 
   return (
     <div className="map-card">
@@ -137,7 +209,7 @@ export default function LiveMap({
           <div className="map-loading-overlay">Loading incidents…</div>
         )}
 
-        {/* Floating chip when viewing a custom searched location */}
+        {/* ── Top-Left: Searched Location Badge ── */}
         {selectedLocation.isCustom && (
           <div className="map-floating-chip">
             <span>📍 Viewing: <b>{selectedLocation.label}</b></span>
@@ -151,6 +223,171 @@ export default function LiveMap({
                 Return to My Location
               </button>
             )}
+          </div>
+        )}
+
+        {/* ── Top-Right: Map Action Toolbar (Show/Hide, Filters, Zoom) ── */}
+        <div className="map-top-toolbar">
+          {/* Show / Hide Incidents Toggle */}
+          <button
+            type="button"
+            className={`map-tool-btn ${!incidentsVisible ? 'tool-btn-hidden-mode' : ''}`}
+            onClick={handleToggleVisibility}
+            aria-label={incidentsVisible ? 'Hide incident markers' : 'Show incident markers'}
+            aria-pressed={!incidentsVisible}
+            title={incidentsVisible ? 'Hide incident markers on map' : 'Show incident markers on map'}
+          >
+            {incidentsVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+            <span className="map-tool-text">
+              {incidentsVisible ? 'Hide Incidents' : 'Show Incidents'}
+            </span>
+          </button>
+
+          {/* Map-Local Filters Button */}
+          <button
+            type="button"
+            className={`map-tool-btn ${isFilterPanelOpen ? 'tool-btn-active' : ''} ${hasFilterActive ? 'tool-btn-filtered' : ''}`}
+            onClick={() => setIsFilterPanelOpen((prev) => !prev)}
+            aria-label="Map filters"
+            aria-expanded={isFilterPanelOpen}
+            title="Filter visible incidents by category and severity"
+          >
+            <Filter size={15} />
+            <span className="map-tool-text">Filters</span>
+            {hasFilterActive && (
+              <span className="map-tool-badge">
+                {activeCategoryCount}/{mapLegend.length}
+              </span>
+            )}
+          </button>
+
+          {/* Zoom controls */}
+          <MapZoomButtons />
+        </div>
+
+        {/* ── Notice Banner if markers are hidden ── */}
+        {!incidentsVisible && (
+          <div className="map-hidden-notice" role="status">
+            <span>👁️ Incident markers are hidden ({incidents.length} active in data).</span>
+            <button
+              type="button"
+              className="map-unhide-btn"
+              onClick={handleToggleVisibility}
+            >
+              Show Markers
+            </button>
+          </div>
+        )}
+
+        {/* ── Map-Local Filter Drawer / Overlay Panel ── */}
+        {isFilterPanelOpen && (
+          <div className="map-filter-panel" ref={filterPanelRef} role="dialog" aria-label="Incident Filters">
+            <div className="mf-header">
+              <div className="mf-title">
+                <Filter size={15} />
+                <span>Incident Filters</span>
+              </div>
+              <div className="mf-actions">
+                {hasFilterActive && (
+                  <button
+                    type="button"
+                    className="mf-reset-btn"
+                    onClick={handleResetFilters}
+                    title="Reset all filters to default"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Reset</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="mf-close-btn"
+                  onClick={() => setIsFilterPanelOpen(false)}
+                  aria-label="Close filters panel"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="mf-body">
+              {/* Category Filter Section */}
+              <div className="mf-section">
+                <div className="mf-section-header">
+                  <span className="mf-section-title">Incident Categories</span>
+                  <span className="mf-section-sub">
+                    {activeCategoryCount} of {mapLegend.length} active
+                  </span>
+                </div>
+                <div className="mf-category-list">
+                  {mapLegend.map((cat) => {
+                    const isChecked = categories[cat.label] !== false;
+                    const count = incidents.filter((i) => (i.category || 'Other') === cat.label).length;
+                    return (
+                      <button
+                        type="button"
+                        key={cat.label}
+                        className={`mf-cat-btn ${isChecked ? 'active' : 'inactive'}`}
+                        onClick={() => handleCategoryToggle(cat.label)}
+                        aria-pressed={isChecked}
+                      >
+                        <span
+                          className="mf-cat-dot"
+                          style={{ background: isChecked ? cat.color : '#94a3b8' }}
+                        />
+                        <span className="mf-cat-label">{cat.label}</span>
+                        <span className="mf-cat-count">({count})</span>
+                        <span className="mf-cat-check">
+                          {isChecked ? <Check size={12} /> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Severity Filter Section */}
+              <div className="mf-section">
+                <div className="mf-section-header">
+                  <span className="mf-section-title">Severity Level</span>
+                  <span className="mf-section-sub">Current: {severityFilter}</span>
+                </div>
+                <div className="mf-severity-chips">
+                  {SEVERITY_OPTIONS.map((sev) => {
+                    const isSelected = severityFilter.toLowerCase() === sev.toLowerCase();
+                    return (
+                      <button
+                        type="button"
+                        key={sev}
+                        className={`mf-sev-chip ${isSelected ? 'active' : ''}`}
+                        onClick={() => {
+                          if (onSelectSeverity) {
+                            onSelectSeverity(sev);
+                          } else {
+                            setLocalSeverity(sev);
+                          }
+                        }}
+                      >
+                        {sev}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Visibility quick toggle inside panel */}
+              <div className="mf-footer-toggle">
+                <span>Map Marker Display:</span>
+                <button
+                  type="button"
+                  className={`mf-vis-btn ${incidentsVisible ? 'shown' : 'hidden'}`}
+                  onClick={handleToggleVisibility}
+                >
+                  {incidentsVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+                  <span>{incidentsVisible ? 'Visible on map' : 'Markers hidden'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -168,9 +405,6 @@ export default function LiveMap({
 
           {/* Dynamic map center controller */}
           <MapController center={centerCoord} zoom={13} />
-
-          {/* Map zoom controls */}
-          <MapControls />
 
           {/* Device location pin and accuracy circle if available */}
           {deviceLocation && (
@@ -213,13 +447,16 @@ export default function LiveMap({
             </Marker>
           )}
 
-          {/* Incident Pins */}
+          {/* Incident Pins (Rendered when incidentsVisible is true) */}
           {visibleIncidents.map((incident) => {
             const style = CATEGORY_STYLES[incident.category] ?? CATEGORY_STYLES.Other;
+            const incLat = incident.coords?.lat ?? incident.lat;
+            const incLng = incident.coords?.lng ?? incident.lng;
+
             return (
               <Marker
                 key={incident.id}
-                position={[incident.coords.lat, incident.coords.lng]}
+                position={[incLat, incLng]}
                 icon={makePinIcon(style.color, style.icon)}
               >
                 <Popup>
