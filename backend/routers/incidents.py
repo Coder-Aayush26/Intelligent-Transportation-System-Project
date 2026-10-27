@@ -11,6 +11,7 @@ from ..schemas import IncidentCreate, IncidentOut, StatsOut
 from ..auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
+from ..services.confidence import compute_total_confidence, evaluate_media_alignment
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -94,7 +95,11 @@ async def list_incidents(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -121,6 +126,18 @@ async def create_incident(
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
+    # Evaluate media alignment once with Gemini Vision on incident creation
+    media_score = None
+    ai_assessment = "No media attached"
+    if payload.media_urls:
+        media_score, ai_assessment = evaluate_media_alignment(payload.description, payload.media_urls)
+
+    initial_confidence = compute_total_confidence(
+        media_score=media_score,
+        verif_list=[],
+        user=current_user,
+    )
+
     inc_doc = {
         "_id": incident_id,
         "id": incident_id,
@@ -130,7 +147,9 @@ async def create_incident(
         "lat": payload.lat,
         "lng": payload.lng,
         "severity": payload.severity or "Medium",
-        "confidence": 50,  # starts at 50; rises/falls with verifications
+        "confidence": initial_confidence,
+        "media_score": media_score,
+        "ai_assessment": ai_assessment or "Pending",
         "description": payload.description,
         "reporter": reporter_name,
         "user_id": reporter_user_id,
@@ -139,7 +158,6 @@ async def create_incident(
         "source": payload.source or "Web App",
         "media_urls": payload.media_urls,
         "media_count": len(payload.media_urls),
-        "ai_assessment": "Pending",
         "map_position_top": "50%",
         "map_position_left": "50%",
         "reported_at_full": now,
@@ -198,7 +216,11 @@ async def get_stats(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         active_incidents.append(inc)
 
     high_conf = [i for i in active_incidents if i.get("confidence", 50) >= 80]
@@ -283,7 +305,11 @@ async def get_nearby_incidents(
         if dist <= radius:
             verif_cursor = db.verifications.find({"incident_id": inc["id"]})
             verif = await verif_cursor.to_list(length=500)
-            inc["confidence"] = _confidence_from_verifications(verif)
+            inc["confidence"] = compute_total_confidence(
+                media_score=inc.get("media_score"),
+                verif_list=verif,
+                user=None,
+            )
             result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return sorted(result, key=lambda x: x.confidence, reverse=True)
@@ -300,7 +326,11 @@ async def get_notifications(db = Depends(get_db)):
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        conf = _confidence_from_verifications(verif)
+        conf = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         if conf >= 70:
             inc["confidence"] = conf
             result.append(IncidentOut.from_mongo_doc(inc, verif))
@@ -345,7 +375,11 @@ async def get_my_incidents(
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -362,5 +396,9 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
-    inc["confidence"] = _confidence_from_verifications(verif)
+    inc["confidence"] = compute_total_confidence(
+        media_score=inc.get("media_score"),
+        verif_list=verif,
+        user=None,
+    )
     return IncidentOut.from_mongo_doc(inc, verif)
