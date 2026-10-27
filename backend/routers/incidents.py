@@ -396,8 +396,21 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
+    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand
+    media_score = inc.get("media_score")
+    if media_score is None and inc.get("media_urls"):
+        m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
+        if m_score is not None:
+            media_score = m_score
+            inc["media_score"] = m_score
+            inc["ai_assessment"] = a_assess
+            await db.incidents.update_one(
+                {"id": inc["id"]},
+                {"$set": {"media_score": m_score, "ai_assessment": a_assess}}
+            )
+
     inc["confidence"] = compute_total_confidence(
-        media_score=inc.get("media_score"),
+        media_score=media_score,
         verif_list=verif,
         user=None,
     )
