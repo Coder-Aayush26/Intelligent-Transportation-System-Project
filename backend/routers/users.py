@@ -309,18 +309,19 @@ async def update_location(
     )
 
     # Also update session records
-    await db.sessions.update_many(
-        {"$or": [{"user_id": str(user_id)}, {"email": current_user.get("email")}]},
-        {
-            "$set": {
-                "latitude": lat_f,
-                "longitude": lng_f,
-                "lat": lat_f,
-                "lng": lng_f,
-                "last_active": now,
+    if hasattr(db.sessions, "update_many"):
+        await db.sessions.update_many(
+            {"$or": [{"user_id": str(user_id)}, {"email": current_user.get("email")}]},
+            {
+                "$set": {
+                    "latitude": lat_f,
+                    "longitude": lng_f,
+                    "lat": lat_f,
+                    "lng": lng_f,
+                    "last_active": now,
+                }
             }
-        }
-    )
+        )
 
     return {
         "status": "ok",
