@@ -140,23 +140,16 @@ async def create_incident(
     if payload.media_urls:
         media_score, ai_assessment = evaluate_media_alignment(payload.description, payload.media_urls)
 
-    # AI Authenticity Score (0-100) and 70% minimum threshold check
+    # AI Authenticity Score (0-100) and 70% minimum threshold check evaluated by Gemini Vision
     if media_score is not None:
-        ai_score = int(media_score * 100)
+        ai_score = max(0, min(100, int(media_score * 100)))
     else:
-        # Fallback heuristic if external vision model is offline or unconfigured
-        desc_clean = (payload.description or "").strip()
-        ai_score = 85
-        if len(desc_clean) >= 30:
-            ai_score += 5
-        if len(payload.media_urls) >= 2:
-            ai_score += 5
-        ai_score = min(98, max(50, ai_score))
-        ai_assessment = f"Passed ({ai_score}% Authenticity)"
+        ai_score = 0
+        ai_assessment = ai_assessment or "Media could not be evaluated by AI"
 
     ai_verified = ai_score >= 70
-    if not ai_assessment:
-        ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_verified else f"Flagged ({ai_score}% Authenticity)"
+    if ai_assessment and not ai_assessment.startswith(("Passed", "Flagged")):
+        ai_assessment = f"Passed ({ai_score}% Authenticity): {ai_assessment}" if ai_verified else f"Flagged ({ai_score}% Authenticity): {ai_assessment}"
 
     initial_confidence = compute_total_confidence(
         media_score=media_score if media_score is not None else (ai_score / 100.0),
@@ -425,18 +418,38 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
-    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand
+    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand with Gemini Vision
     media_score = inc.get("media_score")
     if media_score is None and inc.get("media_urls"):
         m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
         if m_score is not None:
             media_score = m_score
             inc["media_score"] = m_score
+            ai_score = max(0, min(100, int(m_score * 100)))
+            ai_verified = ai_score >= 70
+            if a_assess and not a_assess.startswith(("Passed", "Flagged")):
+                a_assess = f"Passed ({ai_score}% Authenticity): {a_assess}" if ai_verified else f"Flagged ({ai_score}% Authenticity): {a_assess}"
+            stage_val = "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending"
             inc["ai_assessment"] = a_assess
+            inc["ai_authenticity_score"] = ai_score
+            inc["ai_verified"] = ai_verified
+            inc["stage"] = stage_val
             await db.incidents.update_one(
                 {"id": inc["id"]},
-                {"$set": {"media_score": m_score, "ai_assessment": a_assess}}
+                {"$set": {
+                    "media_score": m_score, 
+                    "ai_assessment": a_assess,
+                    "ai_authenticity_score": ai_score,
+                    "ai_verified": ai_verified,
+                    "stage": stage_val,
+                }}
             )
+
+    if inc.get("ai_authenticity_score") is None:
+        ai_score = int(media_score * 100) if media_score is not None else 0
+        inc["ai_authenticity_score"] = ai_score
+        inc["ai_verified"] = ai_score >= 70
+        inc["stage"] = "Stage 2: Community Verification Open" if inc["ai_verified"] else "Stage 1: AI Screening Pending"
 
     inc["confidence"] = compute_total_confidence(
         media_score=media_score,

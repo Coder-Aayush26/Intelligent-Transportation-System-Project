@@ -233,8 +233,8 @@ export default function NearbyIncidentsPage() {
               ? getDistanceMeters(userCoord.lat, userCoord.lng, inc.coords.lat, inc.coords.lng) 
               : null;
             const hasMedia = Boolean((inc.mediaUrls && inc.mediaUrls.length > 0) || inc.mediaCount > 0);
-            const aiScore = inc.aiAuthenticityScore ?? (hasMedia ? 85 : 0);
-            const isAiPassed = hasMedia && aiScore >= 70;
+            const aiScore = inc.aiAuthenticityScore ?? (inc.mediaScore != null ? Math.round(inc.mediaScore * 100) : 0);
+            const isAiPassed = Boolean(inc.aiVerified ?? (hasMedia && aiScore >= 70));
             const isWithin1km = distMeters != null && distMeters <= 1000;
             const canQuickVote = isAiPassed && isWithin1km;
 

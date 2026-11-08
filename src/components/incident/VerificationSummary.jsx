@@ -66,13 +66,13 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
     return getDistanceMeters(userCoords.lat, userCoords.lng, incLat, incLng);
   }, [userCoords, incLat, incLng]);
 
-  // Gate 1: Stage-1 AI Verification Threshold
+  // Gate 1: Stage-1 AI Verification Threshold (evaluated by Gemini Vision)
   const hasMedia = Boolean(
     (Array.isArray(incident.mediaUrls) && incident.mediaUrls.length > 0) ||
     incident.mediaCount > 0
   );
-  const aiScore = incident.aiAuthenticityScore ?? (hasMedia ? 85 : 0);
-  const isAiApproved = hasMedia && aiScore >= AI_MIN_THRESHOLD;
+  const aiScore = incident.aiAuthenticityScore ?? (incident.mediaScore != null ? Math.round(incident.mediaScore * 100) : 0);
+  const isAiApproved = Boolean(incident.aiVerified ?? (hasMedia && aiScore >= AI_MIN_THRESHOLD));
 
   // Gate 2: Proximity Gate (within 1000 meters)
   const isWithinProximity = distanceMeters != null && distanceMeters <= PROXIMITY_LIMIT_METERS;
