@@ -5,6 +5,7 @@ import { mapLegend } from '../data/mockData';
 import LiveMap from '../components/dashboard/LiveMap';
 import StatsRow from '../components/dashboard/StatsRow';
 import ActiveIncidentsPanel from '../components/dashboard/ActiveIncidentsPanel';
+import QuickReportBar from '../components/dashboard/QuickReportBar';
 import './DashboardPage.css';
 
 const EMPTY_STATS = [
@@ -152,6 +153,7 @@ export default function DashboardPage() {
 
       <div className="dash-grid">
         <div>
+          <QuickReportBar onReported={loadData} />
           <LiveMap
             incidents={incidents}
             loading={loading}
