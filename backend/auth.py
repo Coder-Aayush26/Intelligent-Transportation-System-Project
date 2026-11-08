@@ -84,13 +84,15 @@ async def get_current_user(
         )
 
     # 1. First check separate authority personnel table: db.authorities
-    authority_user = await db.authorities.find_one({"_id": user_id})
-    if not authority_user:
-        authority_user = await db.authorities.find_one({"id": user_id})
-    if not authority_user and payload.get("email"):
-        authority_user = await db.authorities.find_one({"email": payload.get("email")})
-    if not authority_user and payload.get("officer_id"):
-        authority_user = await db.authorities.find_one({"officer_id": payload.get("officer_id")})
+    authority_user = None
+    if hasattr(db, "authorities"):
+        authority_user = await db.authorities.find_one({"_id": user_id})
+        if not authority_user:
+            authority_user = await db.authorities.find_one({"id": user_id})
+        if not authority_user and payload.get("email"):
+            authority_user = await db.authorities.find_one({"email": payload.get("email")})
+        if not authority_user and payload.get("officer_id"):
+            authority_user = await db.authorities.find_one({"officer_id": payload.get("officer_id")})
 
     if authority_user:
         authority_user["is_authority"] = True

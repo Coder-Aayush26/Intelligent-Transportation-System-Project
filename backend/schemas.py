@@ -67,6 +67,13 @@ class IncidentOut(BaseModel):
         media_list = inc.get("media_urls", [])
         has_media = bool(media_list and len(media_list) > 0) or (inc.get("media_count", 0) > 0)
         
+        resolved_at = inc.get("resolved_at")
+        is_active_val = inc.get("is_active", 1) in (1, True)
+        
+        status_val = inc.get("status")
+        if not status_val:
+            status_val = "Active" if is_active_val else "Resolved"
+
         # Calculate AI Authenticity score: default 85% if media present, 0% if absent
         ai_score = inc.get("ai_authenticity_score")
         if ai_score is None:
