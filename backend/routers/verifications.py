@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..database import get_db
 from ..schemas import VerificationCreate, VerificationOut
+from ..realtime import realtime_manager
 
 router = APIRouter(tags=["verifications"])
 
@@ -34,6 +35,21 @@ async def verify_incident(
     }
     
     await db.verifications.insert_one(v_doc)
+
+    # Compute updated verification numbers and confidence
+    verifs = await db.verifications.find({"incident_id": incident_id}).to_list(length=500)
+    confirms = sum(1 for v in verifs if v.get("verdict") == "confirm")
+    contra = sum(1 for v in verifs if v.get("verdict") == "contradict")
+    conf = max(5, min(99, 50 + confirms * 5 - contra * 8))
+
+    await realtime_manager.broadcast("incident_verified", {
+        "incident_id": incident_id,
+        "confidence": conf,
+        "verifications": len(verifs),
+        "nearbyVerifications": confirms,
+        "contradictions": contra,
+    })
+
     return VerificationOut(
         id=doc_id,
         incident_id=incident_id,

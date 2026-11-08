@@ -74,3 +74,32 @@ export function fetchMyReports() {
   return apiFetch('/incidents/my', { noCache: true });
 }
 
+/** Update incident resolution status and notes (City Officials / Authority). */
+export function updateIncidentResolution(id, payload) {
+  return apiFetch(`/incidents/${id}/resolution`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    noCache: true,
+  });
+}
+
+/** Fetch all incidents for the Authority Dashboard operations console. */
+export function fetchAuthorityIncidents(params = {}) {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.category) query.set('category', params.category);
+  if (params.severity) query.set('severity', params.severity);
+  const qs = query.toString();
+  return apiFetch(`/incidents/authority/all${qs ? `?${qs}` : ''}`, { noCache: true });
+}
+
+/** Fetch hotspot corridor clusters and heatmap points for leaflet.heat. */
+export function fetchHotspotAnalytics(days = 30) {
+  return apiFetch(`/incidents/analytics/hotspots?days=${days}`, { noCache: true });
+}
+
+/** Fetch city-wide road safety trend metrics and hourly distribution. */
+export function fetchSafetyTrends() {
+  return apiFetch('/incidents/analytics/trends', { noCache: true });
+}
+

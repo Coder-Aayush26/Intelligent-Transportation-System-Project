@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import RealtimeToast from './RealtimeToast';
 import { useAppLocation } from '../../context/LocationContext';
 import './AppLayout.css';
 
@@ -8,6 +9,8 @@ const TITLES = {
   '/app/dashboard': 'Search location…',
   '/app/report': 'New incident report',
   '/app/profile': 'My profile',
+  '/app/analytics': 'GIS Hotspots & Historical Safety Analytics',
+  '/app/authority': 'City Authority & Emergency Operations Center',
 };
 
 export default function AppLayout() {
@@ -18,6 +21,7 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <Sidebar />
+      <RealtimeToast />
       <main>
         <Topbar title={title} />
         {!deviceLocation && permissionState !== 'denied' && (

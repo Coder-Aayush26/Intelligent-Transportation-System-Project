@@ -83,7 +83,20 @@ async def get_current_user(
             {"$set": {"last_active": datetime.utcnow()}}
         )
 
-    # Look up user by string _id, ObjectId, id, or email
+    # 1. First check separate authority personnel table: db.authorities
+    authority_user = await db.authorities.find_one({"_id": user_id})
+    if not authority_user:
+        authority_user = await db.authorities.find_one({"id": user_id})
+    if not authority_user and payload.get("email"):
+        authority_user = await db.authorities.find_one({"email": payload.get("email")})
+    if not authority_user and payload.get("officer_id"):
+        authority_user = await db.authorities.find_one({"officer_id": payload.get("officer_id")})
+
+    if authority_user:
+        authority_user["is_authority"] = True
+        return authority_user
+
+    # 2. Otherwise look up in citizens collection: db.users
     user = await db.users.find_one({"_id": user_id})
     if not user:
         try:
@@ -112,3 +125,28 @@ async def get_current_user_optional(
         return await get_current_user(credentials, db)
     except HTTPException:
         return None
+
+
+def is_authority_user(user: dict) -> bool:
+    """Check if the user is an authorized official, traffic police officer, or administrator."""
+    if not user:
+        return False
+    role = str(user.get("role", "")).lower()
+    if role in ("official", "admin", "authority", "traffic_police", "police", "operator"):
+        return True
+    email = str(user.get("email", "")).lower()
+    if any(k in email for k in ("admin", "official", "gov.in", "police", "its-admin")):
+        return True
+    return False
+
+
+async def get_current_authority_user(
+    current_user: dict = Depends(get_current_user),
+):
+    """Enforces that the current authenticated user has official or administrative authority privileges."""
+    if not is_authority_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted. Only authorized municipal city officials, traffic police, and administrators may access authority operations.",
+        )
+    return current_user

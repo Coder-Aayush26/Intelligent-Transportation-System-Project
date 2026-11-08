@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchIncidents, fetchStats } from '../api/incidents';
 import { useAppLocation } from '../context/LocationContext';
+import { useRealtime } from '../context/RealtimeContext';
 import { mapLegend } from '../data/mockData';
 import LiveMap from '../components/dashboard/LiveMap';
 import StatsRow from '../components/dashboard/StatsRow';
@@ -20,6 +21,7 @@ export default function DashboardPage() {
     locationError, 
     clearLocationError 
   } = useAppLocation();
+  const { subscribe } = useRealtime();
 
   const [incidents, setIncidents] = useState([]);
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -93,6 +95,58 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Live streaming subscription: stream incidents into the dashboard in real-time
+  useEffect(() => {
+    const unsubCreated = subscribe('incident_created', (newInc) => {
+      setIncidents((prev) => {
+        if (prev.some((i) => i.id === newInc.id)) return prev;
+        return [newInc, ...prev];
+      });
+      setStats((prevStats) =>
+        prevStats.map((st) => {
+          if (st.label === 'Total Active Incidents') return { ...st, value: Number(st.value) + 1 };
+          if (st.label === 'Reports Today') return { ...st, value: Number(st.value) + 1 };
+          if (st.label === 'High Confidence' && (newInc.confidence || 50) >= 80) return { ...st, value: Number(st.value) + 1 };
+          return st;
+        })
+      );
+    });
+
+    const unsubVerified = subscribe('incident_verified', (verifData) => {
+      setIncidents((prev) =>
+        prev.map((i) => {
+          if (i.id === verifData.incident_id) {
+            return {
+              ...i,
+              confidence: verifData.confidence,
+              verifications: verifData.verifications,
+              nearbyVerifications: verifData.nearbyVerifications,
+              contradictions: verifData.contradictions,
+            };
+          }
+          return i;
+        })
+      );
+    });
+
+    const unsubResolved = subscribe('incident_resolved', (resolvedInc) => {
+      setIncidents((prev) => prev.filter((i) => i.id !== resolvedInc.id));
+      setStats((prevStats) =>
+        prevStats.map((st) => {
+          if (st.label === 'Total Active Incidents') return { ...st, value: Math.max(0, Number(st.value) - 1) };
+          if (st.label === 'Verified Today') return { ...st, value: Number(st.value) + 1 };
+          return st;
+        })
+      );
+    });
+
+    return () => {
+      unsubCreated();
+      unsubVerified();
+      unsubResolved();
+    };
+  }, [subscribe]);
 
   const handleToggleCategory = (cat) => {
     setActiveCategories((prev) => ({

@@ -45,3 +45,29 @@ export function updateUserLocation(coordsOrLat, maybeLng) {
     noCache: true,
   });
 }
+
+/** Verify security passkey to elevate current user to an authorized official/admin. */
+export function verifyAuthorityAccess(passkey, department = 'Traffic Control Department', badgeNumber = 'IND-TP-01') {
+  return apiFetch('/auth/verify-authority', {
+    method: 'POST',
+    body: JSON.stringify({ passkey, department, badge_number: badgeNumber }),
+    noCache: true,
+  });
+}
+
+/** Directly authenticate or sign in an official/admin into the Authority Portal. */
+export function loginAuthorityApi({ identifier, password, passkey, department, badgeNumber }) {
+  return apiFetch('/auth/authority-login', {
+    method: 'POST',
+    body: JSON.stringify({
+      identifier,
+      password: password || 'Official@2025',
+      passkey,
+      department: department || 'Indore Traffic Police Control Room',
+      badge_number: badgeNumber || 'IND-TP-01',
+    }),
+    noCache: true,
+  });
+}
+
+

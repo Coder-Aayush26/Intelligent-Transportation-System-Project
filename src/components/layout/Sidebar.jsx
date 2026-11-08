@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { 
   Map, FileText, MapPin, Bell, Star, BarChart2, PlusCircle, 
-  User, Settings, LogOut, Menu, Home
+  User, Settings, LogOut, Menu, Home, Radio
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useRealtime } from '../../context/RealtimeContext';
 import { fetchNotifications } from '../../api/incidents';
 import ConfirmModal from '../common/ConfirmModal';
 import './Sidebar.css';
@@ -23,15 +24,27 @@ const BASE_NAV_ITEMS = [
 
 export default function Sidebar() {
   const { logout } = useAuth();
+  const { connectionStatus, subscribe } = useRealtime();
   const navigate = useNavigate();
   const [notifCount, setNotifCount] = useState(0);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchNotifications()
-      .then((data) => setNotifCount(Array.isArray(data) ? data.length : 0))
-      .catch(() => setNotifCount(0));
-  }, []);
+    const refreshCount = () => {
+      fetchNotifications()
+        .then((data) => setNotifCount(Array.isArray(data) ? data.length : 0))
+        .catch(() => setNotifCount(0));
+    };
+
+    refreshCount();
+    // Auto-update notification count on real-time incident broadcasts
+    const unsub1 = subscribe('incident_created', refreshCount);
+    const unsub2 = subscribe('incident_resolved', refreshCount);
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [subscribe]);
 
   const handleConfirmLogout = async () => {
     setIsLogoutModalOpen(false);
@@ -60,9 +73,11 @@ export default function Sidebar() {
 
           <div className="sb-divider" role="separator" />
 
+          {/* Citizen App Navigation Menu */}
           {BASE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const showBadge = item.label === 'Notifications' && notifCount > 0;
+
             return (
               <NavLink
                 key={item.to}
@@ -78,6 +93,13 @@ export default function Sidebar() {
         </nav>
 
         <div className="sidebar-foot">
+          <div className={`sb-realtime-status status-${connectionStatus}`} title={`Real-time incident stream: ${connectionStatus}`}>
+            <span className="pulse-dot" />
+            <span className="status-label">
+              {connectionStatus === 'connected' ? 'LIVE STREAM' : connectionStatus === 'connecting' ? 'CONNECTING…' : 'OFFLINE'}
+            </span>
+          </div>
+
           <button 
             type="button"
             onClick={() => setIsLogoutModalOpen(true)} 

@@ -14,6 +14,8 @@ import NotificationsPage from './pages/NotificationsPage';
 import NearbyIncidentsPage from './pages/NearbyIncidentsPage';
 import SettingsPage from './pages/SettingsPage';
 import MyReportsPage from './pages/MyReportsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import AuthorityPortalPage from './pages/AuthorityPortalPage';
 
 export default function App() {
   return (
@@ -22,6 +24,9 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+
+      {/* Dedicated Standalone Authority & Emergency Operations Portal */}
+      <Route path="/authority" element={<AuthorityPortalPage />} />
 
       {/* Protected app shell — wrapped in RequireAuth */}
       <Route
@@ -43,13 +48,11 @@ export default function App() {
         <Route path="settings" element={<SettingsPage />} />
 
         <Route path="reports" element={<MyReportsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="authority" element={<Navigate to="/authority" replace />} />
         <Route
           path="favorites"
           element={<PlaceholderPage title="Favorites" description="Routes and locations you're watching for incident updates." />}
-        />
-        <Route
-          path="analytics"
-          element={<PlaceholderPage title="Analytics" description="Historical GIS analysis — hotspots, recurring disruptions, and trends." />}
         />
       </Route>
 
