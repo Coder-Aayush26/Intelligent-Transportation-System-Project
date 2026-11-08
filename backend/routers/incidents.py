@@ -80,6 +80,12 @@ async def list_incidents(
 
     result = []
     for inc in incidents:
+        # Exclude sub-70% authenticity incidents
+        if inc.get("ai_authenticity_score") is not None and inc.get("ai_authenticity_score") < 70:
+            continue
+        if inc.get("media_score") is not None and inc.get("media_score") < 0.70:
+            continue
+
         # Haversine precise circular filtering when geo-bounds were provided
         if has_geo_filter:
             inc_lat = inc.get("lat")
@@ -147,7 +153,14 @@ async def create_incident(
         ai_score = 0
         ai_assessment = ai_assessment or "Media could not be evaluated by AI"
 
-    ai_verified = ai_score >= 70
+    # Strict Gate: If AI authenticity score is below 70%, reject immediately and do NOT store in DB
+    if ai_score < 70:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Report rejected by Stage-1 AI Verification: Authenticity score is {ai_score}% (requires ≥70%). AI Assessment: {ai_assessment}. Reports failing the authenticity threshold are discarded immediately to keep the database clean.",
+        )
+
+    ai_verified = True
 
     initial_confidence = compute_total_confidence(
         media_score=media_score if media_score is not None else (ai_score / 100.0),
@@ -313,6 +326,11 @@ async def get_nearby_incidents(
 
     result = []
     for inc in incidents:
+        if inc.get("ai_authenticity_score") is not None and inc.get("ai_authenticity_score") < 70:
+            continue
+        if inc.get("media_score") is not None and inc.get("media_score") < 0.70:
+            continue
+
         inc_lat = inc.get("lat")
         inc_lng = inc.get("lng")
         if inc_lat is None or inc_lng is None:
@@ -439,10 +457,20 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
         m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
         if m_score is not None:
             media_score = m_score
-            inc["media_score"] = m_score
             ai_score = max(0, min(100, int(m_score * 100)))
-            ai_verified = ai_score >= 70
-            stage_val = "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending"
+
+            # If AI score is below 70%, purge from database immediately
+            if ai_score < 70:
+                await db.incidents.delete_one({"id": inc["id"]})
+                await db.verifications.delete_many({"incident_id": inc["id"]})
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Incident deleted: Stage-1 AI authenticity score is {ai_score}% (<70% threshold). Assessment: {a_assess}.",
+                )
+
+            inc["media_score"] = m_score
+            ai_verified = True
+            stage_val = "Stage 2: Community Verification Open"
             inc["ai_assessment"] = a_assess
             inc["ai_authenticity_score"] = ai_score
             inc["ai_verified"] = ai_verified
@@ -463,6 +491,16 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
                     "confidence": inc["confidence"],
                 }}
             )
+
+    # Check existing stored score: if already below 70%, purge from DB and return 404
+    stored_score = inc.get("ai_authenticity_score")
+    if stored_score is not None and stored_score < 70:
+        await db.incidents.delete_one({"id": inc["id"]})
+        await db.verifications.delete_many({"incident_id": inc["id"]})
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident removed: AI authenticity score of {stored_score}% fell below the 70% threshold.",
+        )
 
     if inc.get("ai_authenticity_score") is None:
         ai_score = int(media_score * 100) if media_score is not None else 0
