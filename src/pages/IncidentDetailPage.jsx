@@ -15,18 +15,21 @@ export default function IncidentDetailPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
         const data = await fetchIncident(id);
         if (data) {
           setIncident(data);
           return;
         }
+        const mock = mockIncidents.find((i) => i.id === id);
+        setIncident(mock || null);
       } catch {
-        // Fallback to mock data if offline or waking up
+        const mock = mockIncidents.find((i) => i.id === id);
+        setIncident(mock || null);
+      } finally {
+        setLoading(false);
       }
-      const mock = mockIncidents.find((i) => i.id === id);
-      setIncident(mock || null);
-      setLoading(false);
     }
     load();
   }, [id]);
