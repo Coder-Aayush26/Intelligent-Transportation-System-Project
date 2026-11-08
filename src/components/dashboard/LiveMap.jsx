@@ -501,8 +501,8 @@ export default function LiveMap({
               ? getDistanceMeters(userCoord.lat, userCoord.lng, incLat, incLng) 
               : null;
             const hasMedia = Boolean((incident.mediaUrls && incident.mediaUrls.length > 0) || incident.mediaCount > 0);
-            const aiScore = incident.aiAuthenticityScore ?? (hasMedia ? 85 : 0);
-            const isAiPassed = hasMedia && aiScore >= 70;
+            const aiScore = incident.aiAuthenticityScore ?? (incident.mediaScore != null ? Math.round(incident.mediaScore * 100) : 0);
+            const isAiPassed = Boolean(incident.aiVerified ?? (hasMedia && aiScore >= 70));
             const isWithin1km = distMeters != null && distMeters <= 1000;
             const canQuickVote = isAiPassed && isWithin1km;
 

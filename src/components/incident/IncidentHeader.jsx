@@ -116,7 +116,7 @@ export default function IncidentHeader({ incident }) {
             <div className="timeline-body">
               <div className="timeline-title">2. Stage-1 AI Assessment & Media Screening</div>
               <div className="timeline-meta">
-                Coordinates geo-tagged at ({lat?.toFixed?.(4)}, {lng?.toFixed?.(4)}). AI Authenticity Screening: <b>{incident.aiAssessment || 'Passed (85% Authenticity)'}</b> (Minimum threshold: ≥70%).
+                Coordinates geo-tagged at ({lat?.toFixed?.(4)}, {lng?.toFixed?.(4)}). AI Authenticity Screening: <b>{incident.aiAssessment || (incident.aiAuthenticityScore != null ? `${incident.aiAuthenticityScore}% Authenticity` : 'Pending AI Evaluation')}</b> (Minimum threshold: ≥70%).
               </div>
             </div>
           </div>

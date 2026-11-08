@@ -41,8 +41,8 @@ async def verify_incident(
     # ── Gate 1: Stage-1 AI Verification Threshold (Minimum 70% Authenticity) ──
     ai_score = inc.get("ai_authenticity_score")
     if ai_score is None:
-        media_list = inc.get("media_urls", [])
-        ai_score = 85 if (media_list and len(media_list) > 0) else 0
+        media_score = inc.get("media_score")
+        ai_score = int(media_score * 100) if media_score is not None else 0
 
     if ai_score < 70:
         raise HTTPException(

@@ -84,6 +84,12 @@ async def list_incidents(
 
     result = []
     for inc in incidents:
+        # Exclude sub-70% authenticity incidents
+        if inc.get("ai_authenticity_score") is not None and inc.get("ai_authenticity_score") < 70:
+            continue
+        if inc.get("media_score") is not None and inc.get("media_score") < 0.70:
+            continue
+
         # Haversine precise circular filtering when geo-bounds were provided
         if has_geo_filter:
             inc_lat = inc.get("lat")
@@ -144,23 +150,21 @@ async def create_incident(
     if payload.media_urls:
         media_score, ai_assessment = evaluate_media_alignment(payload.description, payload.media_urls)
 
-    # AI Authenticity Score (0-100) and 70% minimum threshold check
+    # AI Authenticity Score (0-100) and 70% minimum threshold check evaluated by Gemini Vision
     if media_score is not None:
-        ai_score = int(media_score * 100)
+        ai_score = max(0, min(100, int(media_score * 100)))
     else:
-        # Fallback heuristic if external vision model is offline or unconfigured
-        desc_clean = (payload.description or "").strip()
-        ai_score = 85
-        if len(desc_clean) >= 30:
-            ai_score += 5
-        if len(payload.media_urls) >= 2:
-            ai_score += 5
-        ai_score = min(98, max(50, ai_score))
-        ai_assessment = f"Passed ({ai_score}% Authenticity)"
+        ai_score = 0
+        ai_assessment = ai_assessment or "Media could not be evaluated by AI"
 
-    ai_verified = ai_score >= 70
-    if not ai_assessment:
-        ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_verified else f"Flagged ({ai_score}% Authenticity)"
+    # Strict Gate: If AI authenticity score is below 70%, reject immediately and do NOT store in DB
+    if ai_score < 70:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Report rejected by Stage-1 AI Verification: Authenticity score is {ai_score}% (requires ≥70%). AI Assessment: {ai_assessment}. Reports failing the authenticity threshold are discarded immediately to keep the database clean.",
+        )
+
+    ai_verified = True
 
     initial_confidence = compute_total_confidence(
         media_score=media_score if media_score is not None else (ai_score / 100.0),
@@ -331,6 +335,11 @@ async def get_nearby_incidents(
 
     result = []
     for inc in incidents:
+        if inc.get("ai_authenticity_score") is not None and inc.get("ai_authenticity_score") < 70:
+            continue
+        if inc.get("media_score") is not None and inc.get("media_score") < 0.70:
+            continue
+
         inc_lat = inc.get("lat")
         inc_lng = inc.get("lng")
         if inc_lat is None or inc_lng is None:
@@ -820,18 +829,79 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
-    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand
+    # On-demand live Gemini Vision evaluation if media exists and needs assessment
     media_score = inc.get("media_score")
-    if media_score is None and inc.get("media_urls"):
+    old_heuristics = [
+        "Photograph attached substantiating reported roadway condition.",
+        "Visual evidence confirms roadway water accumulation and impeded drainage.",
+        "Visual evidence confirms vehicle density and traffic congestion along roadway.",
+        "Visual evidence indicates road obstacle and roadway obstruction matching hazard report.",
+        "Visual evidence confirms vehicle impact and damage consistent with reported accident.",
+        "Automated assessment temporarily unavailable",
+        "Pending",
+    ]
+    curr_assess = str(inc.get("ai_assessment") or "")
+    needs_gemini = bool(inc.get("media_urls")) and (
+        media_score is None or
+        inc.get("ai_authenticity_score") is None or
+        any(h in curr_assess for h in old_heuristics) or
+        curr_assess.startswith("Passed (")
+    )
+
+    if needs_gemini:
         m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
         if m_score is not None:
             media_score = m_score
+            ai_score = max(0, min(100, int(m_score * 100)))
+
+            # If AI score is below 70%, purge from database immediately
+            if ai_score < 70:
+                await db.incidents.delete_one({"id": inc["id"]})
+                await db.verifications.delete_many({"incident_id": inc["id"]})
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Incident deleted: Stage-1 AI authenticity score is {ai_score}% (<70% threshold). Assessment: {a_assess}.",
+                )
+
             inc["media_score"] = m_score
+            ai_verified = True
+            stage_val = "Stage 2: Community Verification Open"
             inc["ai_assessment"] = a_assess
+            inc["ai_authenticity_score"] = ai_score
+            inc["ai_verified"] = ai_verified
+            inc["stage"] = stage_val
+            inc["confidence"] = compute_total_confidence(
+                media_score=media_score,
+                verif_list=verif,
+                user=None,
+            )
             await db.incidents.update_one(
                 {"id": inc["id"]},
-                {"$set": {"media_score": m_score, "ai_assessment": a_assess}}
+                {"$set": {
+                    "media_score": m_score, 
+                    "ai_assessment": a_assess,
+                    "ai_authenticity_score": ai_score,
+                    "ai_verified": ai_verified,
+                    "stage": stage_val,
+                    "confidence": inc["confidence"],
+                }}
             )
+
+    # Check existing stored score: if already below 70%, purge from DB and return 404
+    stored_score = inc.get("ai_authenticity_score")
+    if stored_score is not None and stored_score < 70:
+        await db.incidents.delete_one({"id": inc["id"]})
+        await db.verifications.delete_many({"incident_id": inc["id"]})
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident removed: AI authenticity score of {stored_score}% fell below the 70% threshold.",
+        )
+
+    if inc.get("ai_authenticity_score") is None:
+        ai_score = int(media_score * 100) if media_score is not None else 0
+        inc["ai_authenticity_score"] = ai_score
+        inc["ai_verified"] = ai_score >= 70
+        inc["stage"] = "Stage 2: Community Verification Open" if inc["ai_verified"] else "Stage 1: AI Screening Pending"
 
     inc["confidence"] = compute_total_confidence(
         media_score=media_score,
