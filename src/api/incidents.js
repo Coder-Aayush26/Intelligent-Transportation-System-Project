@@ -31,11 +31,15 @@ export function createIncident(payload) {
   });
 }
 
-/** Submit a community verification for an incident. */
-export function verifyIncident(id, verdict) {
+/** Submit a community verification for an incident with voter coordinates for 1000m proximity check. */
+export function verifyIncident(id, verdict, coords = null) {
   return apiFetch(`/incidents/${id}/verify`, {
     method: 'POST',
-    body: JSON.stringify({ verdict }),
+    body: JSON.stringify({ 
+      verdict,
+      user_lat: coords?.lat ?? null,
+      user_lng: coords?.lng ?? null,
+    }),
   });
 }
 

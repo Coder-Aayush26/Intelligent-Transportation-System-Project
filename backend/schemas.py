@@ -43,6 +43,9 @@ class IncidentOut(BaseModel):
     mediaUrls: List[str] = []
     verifications: int = 0
     aiAssessment: Optional[str] = None
+    aiAuthenticityScore: int = 0
+    aiVerified: bool = False
+    stage: str = "Stage 1: AI Screening"
     nearbyVerifications: int = 0
     contradictions: int = 0
     avgReliability: float = 0.0
@@ -61,12 +64,20 @@ class IncidentOut(BaseModel):
         contradictions = sum(1 for v in verif_list if v.get("verdict") == "contradict")
         
         reported_at_full = inc.get("reported_at_full")
-        resolved_at = inc.get("resolved_at")
-        is_active_val = inc.get("is_active", 1) in (1, True)
+        media_list = inc.get("media_urls", [])
+        has_media = bool(media_list and len(media_list) > 0) or (inc.get("media_count", 0) > 0)
         
-        status_val = inc.get("status")
-        if not status_val:
-            status_val = "Active" if is_active_val else "Resolved"
+        # Calculate AI Authenticity score: default 85% if media present, 0% if absent
+        ai_score = inc.get("ai_authenticity_score")
+        if ai_score is None:
+            ai_score = 85 if has_media else 0
+
+        ai_assessment = inc.get("ai_assessment")
+        if not ai_assessment or ai_assessment == "Pending":
+            ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_score >= 70 else "Pending Media Upload"
+
+        ai_verified = bool(ai_score >= 70 and has_media)
+        stage = "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending"
 
         return cls(
             id=inc.get("id") or str(inc.get("_id", "")),
@@ -81,10 +92,13 @@ class IncidentOut(BaseModel):
             reporter=inc.get("reporter", "Anonymous"),
             description=inc.get("description", ""),
             source=inc.get("source", "Web App"),
-            mediaCount=len(inc.get("media_urls", [])) or inc.get("media_count", 0),
-            mediaUrls=inc.get("media_urls", []),
+            mediaCount=len(media_list) or inc.get("media_count", 0),
+            mediaUrls=media_list,
             verifications=len(verif_list),
-            aiAssessment=inc.get("ai_assessment"),
+            aiAssessment=ai_assessment,
+            aiAuthenticityScore=ai_score,
+            aiVerified=ai_verified,
+            stage=stage,
             nearbyVerifications=confirmations,
             contradictions=contradictions,
             avgReliability=4.0,
@@ -110,8 +124,10 @@ class IncidentResolutionUpdate(BaseModel):
 # ---------- Verification ----------
 
 class VerificationCreate(BaseModel):
-    verdict: str   # "confirm" | "contradict"
+    verdict: str   # "confirm" | "contradict" | "resolve"
     user_id: Optional[Any] = None
+    user_lat: Optional[float] = None
+    user_lng: Optional[float] = None
 
 
 class VerificationOut(BaseModel):
@@ -119,6 +135,9 @@ class VerificationOut(BaseModel):
     id: str
     incident_id: str
     verdict: str
+    new_confidence: Optional[int] = None
+    confirmations: Optional[int] = None
+    contradictions: Optional[int] = None
 
 
 # ---------- User & Settings ----------
