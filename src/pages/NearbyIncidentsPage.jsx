@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { fetchNearbyIncidents } from '../api/incidents';
+import { fetchNearbyIncidents, verifyIncident } from '../api/incidents';
 import { CATEGORY_STYLES } from '../data/mockData';
 import { useAppLocation } from '../context/LocationContext';
 import './NearbyIncidentsPage.css';
@@ -66,6 +66,22 @@ export default function NearbyIncidentsPage() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [popupVotes, setPopupVotes] = useState({});
+
+  const handleQuickVerify = async (e, incidentId, verdict) => {
+    e.stopPropagation();
+    setPopupVotes((prev) => ({ ...prev, [incidentId]: verdict }));
+    try {
+      localStorage.setItem(`its_vote_${incidentId}`, verdict);
+    } catch {
+      // ignore
+    }
+    try {
+      await verifyIncident(incidentId, verdict);
+    } catch (err) {
+      console.warn('Quick verify sync:', err);
+    }
+  };
 
   const activeLat = selectedLocation.lat;
   const activeLng = selectedLocation.lng;
@@ -196,6 +212,7 @@ export default function NearbyIncidentsPage() {
           {incidents.map((inc) => {
             const style = CATEGORY_STYLES[inc.category] ?? CATEGORY_STYLES.Other;
             if (inc.coords?.lat == null || inc.coords?.lng == null) return null;
+            const currentVote = popupVotes[inc.id] || (typeof localStorage !== 'undefined' ? localStorage.getItem(`its_vote_${inc.id}`) : null);
 
             return (
               <Marker
@@ -210,6 +227,24 @@ export default function NearbyIncidentsPage() {
                     <p className="osm-popup-meta">
                       Severity: <b>{inc.severity}</b> &nbsp;|&nbsp; Conf: <b>{inc.confidence}%</b>
                     </p>
+                    <div className="osm-popup-actions">
+                      <button
+                        type="button"
+                        className={`osm-quick-btn btn-confirm ${currentVote === 'confirm' ? 'voted' : ''}`}
+                        onClick={(e) => handleQuickVerify(e, inc.id, 'confirm')}
+                        title="Confirm incident is active"
+                      >
+                        {currentVote === 'confirm' ? '✓ Confirmed' : '👍 Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        className={`osm-quick-btn btn-dispute ${currentVote === 'contradict' ? 'voted' : ''}`}
+                        onClick={(e) => handleQuickVerify(e, inc.id, 'contradict')}
+                        title="Report as incorrect or not present"
+                      >
+                        {currentVote === 'contradict' ? '✕ Disputed' : '👎 Dispute'}
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className="osm-popup-link"

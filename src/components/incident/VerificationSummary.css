@@ -1,25 +1,212 @@
-/* ── Verification Summary ─────────────────────────────────────── */
+/* ── Verification Summary & Interactive Voting ────────────────── */
+.verif-summary-card {
+  margin-top: 18px;
+}
+
+.verif-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.verif-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--neon, #2563eb);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.verif-metrics-list {
+  margin-bottom: 16px;
+}
+
 .verif-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 10px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--border);
   font-size: 12.5px;
 }
 
-.verif-row:last-child { border-bottom: none; }
+.verif-row:last-child {
+  border-bottom: none;
+}
+
+.verif-label {
+  color: var(--muted, #64748b);
+  flex: 1;
+}
+
+.verif-val {
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
 
 .check-ok {
-  color: var(--neon-green);
-  font-size: 16px;
-  filter: drop-shadow(0 0 6px rgba(74,222,128,0.5));
+  color: #10b981;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .check-warn {
-  color: var(--neon-orange);
-  font-size: 16px;
+  color: #f59e0b;
+  font-weight: 600;
+  font-size: 13px;
 }
 
-.verif-label { color: var(--text-soft); flex: 1; }
-.verif-val { font-weight: 700; color: var(--text); }
+/* ── Interactive Community Action Section ────────────────────── */
+.community-action-section {
+  background: var(--bg, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.community-action-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+
+.community-action-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
+
+.community-action-sub {
+  font-size: 12px;
+  color: var(--muted, #64748b);
+}
+
+.verif-feedback-banner {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.verif-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.verif-action-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.btn-verif {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 8px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: var(--card, #ffffff);
+  color: var(--text, #0f172a);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.btn-verif:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+}
+
+.btn-verif:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-verif:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Specific button styles */
+.btn-confirm:hover:not(:disabled),
+.btn-confirm.selected {
+  border-color: #10b981;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.btn-contradict:hover:not(:disabled),
+.btn-contradict.selected {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.btn-resolve:hover:not(:disabled),
+.btn-resolve.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.vote-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: currentColor;
+  color: #ffffff;
+  margin-top: 2px;
+}
+
+.community-notice {
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .verif-action-buttons {
+    grid-template-columns: 1fr;
+  }
+  .btn-verif {
+    flex-direction: row;
+    padding: 8px 12px;
+    justify-content: flex-start;
+  }
+}

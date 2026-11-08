@@ -82,7 +82,7 @@ class IncidentOut(BaseModel):
 # ---------- Verification ----------
 
 class VerificationCreate(BaseModel):
-    verdict: str   # "confirm" | "contradict"
+    verdict: str   # "confirm" | "contradict" | "resolve"
     user_id: Optional[Any] = None
 
 
@@ -91,6 +91,9 @@ class VerificationOut(BaseModel):
     id: str
     incident_id: str
     verdict: str
+    new_confidence: Optional[int] = None
+    confirmations: Optional[int] = None
+    contradictions: Optional[int] = None
 
 
 # ---------- User & Settings ----------

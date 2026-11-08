@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { mapLegend, CATEGORY_STYLES } from '../../data/mockData';
 import { useAppLocation } from '../../context/LocationContext';
+import { verifyIncident } from '../../api/incidents';
 import './LiveMap.css';
 
 // Fix Leaflet's default icon broken paths in bundlers
@@ -90,6 +91,24 @@ export default function LiveMap({
 
   // Reference to Leaflet map instance captured from inside MapContainer
   const [mapInstance, setMapInstance] = useState(null);
+
+  // Quick verification votes cast from map popups
+  const [popupVotes, setPopupVotes] = useState({});
+
+  const handleQuickVerify = async (e, incidentId, verdict) => {
+    e.stopPropagation();
+    setPopupVotes((prev) => ({ ...prev, [incidentId]: verdict }));
+    try {
+      localStorage.setItem(`its_vote_${incidentId}`, verdict);
+    } catch {
+      // ignore
+    }
+    try {
+      await verifyIncident(incidentId, verdict);
+    } catch (err) {
+      console.warn('Quick verify sync:', err);
+    }
+  };
 
   // Show/Hide markers state (local fallback if not controlled)
   const [localIncidentsVisible, setLocalIncidentsVisible] = useState(true);
@@ -459,6 +478,7 @@ export default function LiveMap({
             const style = CATEGORY_STYLES[incident.category] ?? CATEGORY_STYLES.Other;
             const incLat = incident.coords?.lat ?? incident.lat;
             const incLng = incident.coords?.lng ?? incident.lng;
+            const currentVote = popupVotes[incident.id] || (typeof localStorage !== 'undefined' ? localStorage.getItem(`its_vote_${incident.id}`) : null);
 
             return (
               <Marker
@@ -478,12 +498,31 @@ export default function LiveMap({
                     <p className="osm-popup-meta">
                       Severity: <b>{incident.severity}</b> &nbsp;|&nbsp; Conf: <b>{incident.confidence}%</b>
                     </p>
+                    {/* Quick 1-tap verification row */}
+                    <div className="osm-popup-actions">
+                      <button
+                        type="button"
+                        className={`osm-quick-btn btn-confirm ${currentVote === 'confirm' ? 'voted' : ''}`}
+                        onClick={(e) => handleQuickVerify(e, incident.id, 'confirm')}
+                        title="Confirm incident is active"
+                      >
+                        {currentVote === 'confirm' ? '✓ Confirmed' : '👍 Confirm'}
+                      </button>
+                      <button
+                        type="button"
+                        className={`osm-quick-btn btn-dispute ${currentVote === 'contradict' ? 'voted' : ''}`}
+                        onClick={(e) => handleQuickVerify(e, incident.id, 'contradict')}
+                        title="Report as incorrect or not present"
+                      >
+                        {currentVote === 'contradict' ? '✕ Disputed' : '👎 Dispute'}
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className="osm-popup-link"
                       onClick={() => navigate(`/app/incidents/${incident.id}`)}
                     >
-                      View Details →
+                      View Details & Timeline →
                     </button>
                   </div>
                 </Popup>
