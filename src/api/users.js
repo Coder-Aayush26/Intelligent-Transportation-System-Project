@@ -26,10 +26,22 @@ export function updateUserSettings(settings) {
   });
 }
 
-/** Send current user location for proximity awareness. */
-export function updateUserLocation(coords) {
+/** Send current user location to database for proximity awareness and nearby incident calculations. */
+export function updateUserLocation(coordsOrLat, maybeLng) {
+  let lat;
+  let lng;
+  if (typeof coordsOrLat === 'object' && coordsOrLat !== null) {
+    lat = Number(coordsOrLat.latitude !== undefined ? coordsOrLat.latitude : coordsOrLat.lat);
+    lng = Number(coordsOrLat.longitude !== undefined ? coordsOrLat.longitude : coordsOrLat.lng);
+  } else {
+    lat = Number(coordsOrLat);
+    lng = Number(maybeLng);
+  }
+
+  const payload = { lat, lng, latitude: lat, longitude: lng };
   return apiFetch('/users/me/location', {
     method: 'POST',
-    body: JSON.stringify(coords),
+    body: JSON.stringify(payload),
+    noCache: true,
   });
 }

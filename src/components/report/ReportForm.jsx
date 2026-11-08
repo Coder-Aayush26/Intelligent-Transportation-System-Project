@@ -136,7 +136,7 @@ export default function ReportForm({ onLocationAcquired }) {
           formData.append('file', file);
           formData.append('upload_preset', 'its_app_uploads');
 
-          const uploadRes = await fetch('https://api.cloudinary.com/v1_1/hb0sukix/auto/upload', {
+          const uploadRes = await fetch('https://api.cloudinary.com/v1_1/hb0sukix/image/upload', {
             method: 'POST',
             body: formData,
           });
@@ -147,13 +147,25 @@ export default function ReportForm({ onLocationAcquired }) {
               uploadedUrls.push(uploadData.secure_url);
             }
           }
-        } catch {
-          console.warn('Cloudinary upload skipped or failed, using local media representation.');
+        } catch (uploadErr) {
+          console.warn('Cloudinary upload error, using local base64 fallback:', uploadErr);
         }
 
-        // Fallback representation if remote host is unreachable so media is never lost
+        // Fallback: If Cloudinary did not supply a URL, encode file to base64 data URL so AI vision always runs
         if (uploadedUrls.length === 0) {
-          uploadedUrls.push(`https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800#${encodeURIComponent(file.name)}`);
+          try {
+            const dataUrl = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+            if (dataUrl) {
+              uploadedUrls.push(dataUrl);
+            }
+          } catch (fileErr) {
+            console.warn('Fallback base64 encoding failed:', fileErr);
+          }
         }
       }
 

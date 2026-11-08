@@ -11,6 +11,7 @@ from ..schemas import IncidentCreate, IncidentOut, StatsOut
 from ..auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
+from ..services.confidence import compute_total_confidence, evaluate_media_alignment
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -94,7 +95,11 @@ async def list_incidents(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -129,16 +134,35 @@ async def create_incident(
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    # Stage-1 AI Authenticity Assessment (Minimum threshold: 70%)
-    desc_clean = (payload.description or "").strip()
-    ai_score = 85
-    if len(desc_clean) >= 30:
-        ai_score += 5
-    if len(payload.media_urls) >= 2:
-        ai_score += 5
-    ai_score = min(98, max(50, ai_score))
+    # Evaluate media alignment with Gemini Vision on incident creation
+    media_score = None
+    ai_assessment = "No media attached"
+    if payload.media_urls:
+        media_score, ai_assessment = evaluate_media_alignment(payload.description, payload.media_urls)
+
+    # AI Authenticity Score (0-100) and 70% minimum threshold check
+    if media_score is not None:
+        ai_score = int(media_score * 100)
+    else:
+        # Fallback heuristic if external vision model is offline or unconfigured
+        desc_clean = (payload.description or "").strip()
+        ai_score = 85
+        if len(desc_clean) >= 30:
+            ai_score += 5
+        if len(payload.media_urls) >= 2:
+            ai_score += 5
+        ai_score = min(98, max(50, ai_score))
+        ai_assessment = f"Passed ({ai_score}% Authenticity)"
+
     ai_verified = ai_score >= 70
-    ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_verified else f"Flagged ({ai_score}% Authenticity)"
+    if not ai_assessment:
+        ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_verified else f"Flagged ({ai_score}% Authenticity)"
+
+    initial_confidence = compute_total_confidence(
+        media_score=media_score if media_score is not None else (ai_score / 100.0),
+        verif_list=[],
+        user=current_user,
+    )
 
     inc_doc = {
         "_id": incident_id,
@@ -149,7 +173,12 @@ async def create_incident(
         "lat": payload.lat,
         "lng": payload.lng,
         "severity": payload.severity or "Medium",
-        "confidence": 60 if ai_verified else 40,  # Starts with AI baseline confidence
+        "confidence": initial_confidence,
+        "media_score": media_score,
+        "ai_assessment": ai_assessment,
+        "ai_authenticity_score": ai_score,
+        "ai_verified": ai_verified,
+        "stage": "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending",
         "description": payload.description,
         "reporter": reporter_name,
         "user_id": reporter_user_id,
@@ -158,10 +187,6 @@ async def create_incident(
         "source": payload.source or "Web App",
         "media_urls": payload.media_urls,
         "media_count": len(payload.media_urls),
-        "ai_assessment": ai_assessment,
-        "ai_authenticity_score": ai_score,
-        "ai_verified": ai_verified,
-        "stage": "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending",
         "map_position_top": "50%",
         "map_position_left": "50%",
         "reported_at_full": now,
@@ -181,8 +206,15 @@ async def get_stats(
     lng: Optional[float] = Query(None, description="Optional center longitude"),
     radius: Optional[float] = Query(None, gt=0, le=1000.0, description="Optional radius in km"),
     db = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Aggregated dashboard stats, optionally filtered by local geographic scope."""
+    if (lat is None or lng is None) and radius is not None and current_user:
+        last_loc = current_user.get("last_known_location") or {}
+        if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
+            lat = float(last_loc["lat"])
+            lng = float(last_loc["lng"])
+
     _validate_coords(lat, lng)
 
     query = {"is_active": {"$in": [1, True]}}
@@ -213,7 +245,11 @@ async def get_stats(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         active_incidents.append(inc)
 
     high_conf = [i for i in active_incidents if i.get("confidence", 50) >= 80]
@@ -244,13 +280,29 @@ async def get_stats(
 @router.get("/nearby", response_model=List[IncidentOut])
 @router.get("/nearby/", response_model=List[IncidentOut])
 async def get_nearby_incidents(
-    lat: float = Query(..., ge=-90.0, le=90.0, description="Center latitude"),
-    lng: float = Query(..., ge=-180.0, le=180.0, description="Center longitude"),
+    lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Center latitude"),
+    lng: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Center longitude"),
     radius: float = Query(10.0, gt=0, le=1000.0, description="Radius in km"),
     category: Optional[str] = Query(None, description="Optional category filter"),
     db = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
-    """Return active incidents within the specified circular radius (in km) of the coordinates."""
+    """Return active incidents within the specified circular radius (in km) of coordinates or saved user location."""
+    if (lat is None or lng is None) and current_user:
+        last_loc = current_user.get("last_known_location") or {}
+        if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
+            lat = float(last_loc["lat"])
+            lng = float(last_loc["lng"])
+        elif current_user.get("lat") is not None and current_user.get("lng") is not None:
+            lat = float(current_user["lat"])
+            lng = float(current_user["lng"])
+
+    if lat is None or lng is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Coordinates (lat, lng) are required, or save your location in your user profile.",
+        )
+
     _validate_coords(lat, lng)
 
     deg_lat = radius / 111.0
@@ -282,7 +334,11 @@ async def get_nearby_incidents(
         if dist <= radius:
             verif_cursor = db.verifications.find({"incident_id": inc["id"]})
             verif = await verif_cursor.to_list(length=500)
-            inc["confidence"] = _confidence_from_verifications(verif)
+            inc["confidence"] = compute_total_confidence(
+                media_score=inc.get("media_score"),
+                verif_list=verif,
+                user=None,
+            )
             result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return sorted(result, key=lambda x: x.confidence, reverse=True)
@@ -299,7 +355,11 @@ async def get_notifications(db = Depends(get_db)):
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        conf = _confidence_from_verifications(verif)
+        conf = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         if conf >= 70:
             inc["confidence"] = conf
             result.append(IncidentOut.from_mongo_doc(inc, verif))
@@ -344,7 +404,11 @@ async def get_my_incidents(
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _confidence_from_verifications(verif)
+        inc["confidence"] = compute_total_confidence(
+            media_score=inc.get("media_score"),
+            verif_list=verif,
+            user=None,
+        )
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -361,5 +425,22 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
-    inc["confidence"] = _confidence_from_verifications(verif)
+    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand
+    media_score = inc.get("media_score")
+    if media_score is None and inc.get("media_urls"):
+        m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
+        if m_score is not None:
+            media_score = m_score
+            inc["media_score"] = m_score
+            inc["ai_assessment"] = a_assess
+            await db.incidents.update_one(
+                {"id": inc["id"]},
+                {"$set": {"media_score": m_score, "ai_assessment": a_assess}}
+            )
+
+    inc["confidence"] = compute_total_confidence(
+        media_score=media_score,
+        verif_list=verif,
+        user=None,
+    )
     return IncidentOut.from_mongo_doc(inc, verif)

@@ -21,6 +21,10 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class LoginRequest(BaseModel):
@@ -29,6 +33,10 @@ class LoginRequest(BaseModel):
     username: Optional[str] = None
     identifier: Optional[str] = None
     password: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 # ---------- response schemas ----------
@@ -44,6 +52,8 @@ class TokenResponse(BaseModel):
 
 def _safe_user(user: dict) -> dict:
     """Strip password hash before returning user to client."""
+    user_lat = user.get("latitude") if user.get("latitude") is not None else user.get("lat")
+    user_lng = user.get("longitude") if user.get("longitude") is not None else user.get("lng")
     return {
         "id": str(user.get("_id", "")),
         "name": user.get("name", ""),
@@ -53,6 +63,12 @@ def _safe_user(user: dict) -> dict:
         "memberSince": user.get("member_since", ""),
         "reliabilityScore": user.get("reliability_score", 3.0),
         "reliabilityLabel": user.get("reliability_label", "New Member"),
+        "latitude": float(user_lat) if user_lat is not None else None,
+        "longitude": float(user_lng) if user_lng is not None else None,
+        "lat": float(user_lat) if user_lat is not None else None,
+        "lng": float(user_lng) if user_lng is not None else None,
+        "location": user.get("location"),
+        "lastKnownLocation": user.get("last_known_location"),
     }
 
 
@@ -116,6 +132,18 @@ async def register(body: RegisterRequest, db = Depends(get_db)):
                 detail="This username is already taken. Please choose another name or sign in.",
             )
 
+    lat_val = body.latitude if body.latitude is not None else body.lat
+    lng_val = body.longitude if body.longitude is not None else body.lng
+    loc_record = None
+    if lat_val is not None and lng_val is not None:
+        loc_record = {
+            "latitude": float(lat_val),
+            "longitude": float(lng_val),
+            "lat": float(lat_val),
+            "lng": float(lng_val),
+            "updated_at": datetime.utcnow(),
+        }
+
     user_id = uuid.uuid4().hex
     user_doc = {
         "_id": user_id,
@@ -127,6 +155,12 @@ async def register(body: RegisterRequest, db = Depends(get_db)):
         "reliability_score": 3.0,
         "reliability_label": "New Member",
         "created_at": datetime.utcnow(),
+        "latitude": float(lat_val) if lat_val is not None else None,
+        "longitude": float(lng_val) if lng_val is not None else None,
+        "lat": float(lat_val) if lat_val is not None else None,
+        "lng": float(lng_val) if lng_val is not None else None,
+        "location": loc_record,
+        "last_known_location": loc_record,
     }
     await db.users.insert_one(user_doc)
 
@@ -171,6 +205,38 @@ async def login(body: LoginRequest, db = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Login ID / email or password.",
         )
+
+    # If coordinates passed during login, immediately update user record
+    lat_val = body.latitude if body.latitude is not None else body.lat
+    lng_val = body.longitude if body.longitude is not None else body.lng
+    if lat_val is not None and lng_val is not None:
+        loc_record = {
+            "latitude": float(lat_val),
+            "longitude": float(lng_val),
+            "lat": float(lat_val),
+            "lng": float(lng_val),
+            "updated_at": datetime.utcnow(),
+        }
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "latitude": float(lat_val),
+                    "longitude": float(lng_val),
+                    "lat": float(lat_val),
+                    "lng": float(lng_val),
+                    "location": loc_record,
+                    "last_known_location": loc_record,
+                    "location_updated_at": datetime.utcnow(),
+                }
+            }
+        )
+        user["latitude"] = float(lat_val)
+        user["longitude"] = float(lng_val)
+        user["lat"] = float(lat_val)
+        user["lng"] = float(lng_val)
+        user["location"] = loc_record
+        user["last_known_location"] = loc_record
 
     token, session_id = await _create_user_session(db, user)
     return TokenResponse(

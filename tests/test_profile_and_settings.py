@@ -89,6 +89,16 @@ class InMemoryCollection:
                     self.docs[idx] = doc
                     break
 
+    async def update_many(self, query, update):
+        matches = await self.find(query).to_list(1000)
+        matched_ids = {m.get("_id") for m in matches if m.get("_id")}
+        for idx, doc in enumerate(self.docs):
+            if doc.get("_id") in matched_ids:
+                if "$set" in update:
+                    for sk, sv in update["$set"].items():
+                        doc[sk] = sv
+                self.docs[idx] = doc
+
     async def delete_one(self, query):
         for idx, doc in enumerate(self.docs):
             if all(doc.get(k) == v for k, v in query.items()):
@@ -250,7 +260,7 @@ def test_settings_default_retrieval_and_persistence(client, auth_headers):
     defaults = res_default.json()
     assert defaults["notificationRadius"] == 2.0
     assert defaults["nearbyVerificationRequests"] is True
-    assert defaults["locationSharingEnabled"] is False
+    assert defaults["locationSharingEnabled"] is True
 
     # Update settings
     update_payload = {
@@ -262,7 +272,7 @@ def test_settings_default_retrieval_and_persistence(client, auth_headers):
             "Congestion": False,
             "Waterlogging": True
         },
-        "locationSharingEnabled": True,
+        "locationSharingEnabled": False,
         "browserNotificationsEnabled": True
     }
     put_res = client.put("/api/users/me/settings", headers=auth_headers, json=update_payload)
@@ -278,7 +288,7 @@ def test_settings_default_retrieval_and_persistence(client, auth_headers):
     assert saved["nearbyVerificationRequests"] is False
     assert saved["categories"]["Congestion"] is False
     assert saved["categories"]["Accident"] is True
-    assert saved["locationSharingEnabled"] is True
+    assert saved["locationSharingEnabled"] is False
 
 
 def test_settings_radius_validation_rejects_invalid_values(client, auth_headers):

@@ -12,8 +12,24 @@ const DEFAULT_CENTER = {
   isCustom: false,
 };
 
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export function LocationProvider({ children }) {
-  const { user } = useAuth();
+  const { user, isLoggedIn } = useAuth();
+  const watchIdRef = useRef(null);
+  const lastSavedCoordsRef = useRef({ lat: null, lng: null, time: 0 });
   const [deviceLocation, setDeviceLocation] = useState(() => {
     try {
       const lat = parseFloat(sessionStorage.getItem('its_device_lat') || sessionStorage.getItem('its_lat') || '');
@@ -58,19 +74,19 @@ export function LocationProvider({ children }) {
 
   const locatingRef = useRef(false);
 
-  // Sync user location update with backend if locationSharingEnabled is turned on
+  // Sync user location update with backend whenever authenticated
   const syncLocationWithBackend = useCallback(async (lat, lng) => {
-    if (user?.settings?.locationSharingEnabled) {
-      try {
-        await updateUserLocation(lat, lng);
-      } catch {
-        // silent sync failure
-      }
+    const token = localStorage.getItem('its_token');
+    if (!token) return;
+    try {
+      await updateUserLocation(lat, lng);
+    } catch (err) {
+      console.warn('Failed to save location to backend:', err);
     }
-  }, [user?.settings?.locationSharingEnabled]);
+  }, []);
 
   const requestDeviceLocation = useCallback((force = false) => {
-    if (locatingRef.current) return;
+    if (!force && locatingRef.current) return;
     locatingRef.current = true;
     setIsLocating(true);
     setLocationError(null);
@@ -178,14 +194,90 @@ export function LocationProvider({ children }) {
     }
   }, [requestDeviceLocation]);
 
-  // Request location on first mount if not already denied and not already cached
+  // If already authenticated and cached location exists, immediately sync to database on mount
   useEffect(() => {
-    const hasCachedLoc = sessionStorage.getItem('its_device_lat');
-    if (!hasCachedLoc && permissionState !== 'denied') {
-      // Non-blocking initial attempt
-      requestDeviceLocation(false);
+    if (isLoggedIn) {
+      const savedLat = parseFloat(sessionStorage.getItem('its_device_lat') || sessionStorage.getItem('its_lat') || '');
+      const savedLng = parseFloat(sessionStorage.getItem('its_device_lng') || sessionStorage.getItem('its_lng') || '');
+      if (!isNaN(savedLat) && !isNaN(savedLng)) {
+        syncLocationWithBackend(savedLat, savedLng);
+      }
     }
-  }, [permissionState, requestDeviceLocation]);
+  }, [isLoggedIn, syncLocationWithBackend]);
+
+  // Prompt for GPS as soon as user logs in and continuously watch position & save to database
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+    if (!isLoggedIn) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
+
+    // Force prompt/fetch GPS location immediately on login
+    requestDeviceLocation(true);
+
+    // Continuous watchPosition to track live location & sync with database
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setPermissionState('granted');
+        setLocationError(null);
+
+        setDeviceLocation((prev) => ({
+          ...(prev || {}),
+          lat: latitude,
+          lng: longitude,
+          accuracy: accuracy || 0,
+          permissionState: 'granted',
+        }));
+
+        setSelectedLocation((prev) => {
+          if (!prev || !prev.isCustom) {
+            return {
+              ...(prev || {}),
+              lat: latitude,
+              lng: longitude,
+              isCustom: false,
+            };
+          }
+          return prev;
+        });
+
+        const now = Date.now();
+        const last = lastSavedCoordsRef.current;
+        const timeElapsed = now - last.time;
+        const distMeters =
+          last.lat != null && last.lng != null
+            ? haversineMeters(last.lat, last.lng, latitude, longitude)
+            : 999999;
+
+        // Continuously save to database on first callback, or if moved >= 10m, or every 20s
+        if (last.lat == null || distMeters >= 10 || timeElapsed >= 20000) {
+          lastSavedCoordsRef.current = { lat: latitude, lng: longitude, time: now };
+          syncLocationWithBackend(latitude, longitude);
+        }
+      },
+      (err) => {
+        if (err.code === 1) {
+          setPermissionState('denied');
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+
+    watchIdRef.current = watchId;
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [isLoggedIn, requestDeviceLocation, syncLocationWithBackend]);
 
   const selectLocation = useCallback(({ lat, lng, label }) => {
     const newLoc = {
