@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchIncident } from '../api/incidents';
+import { incidents as mockIncidents } from '../data/mockData';
 import IncidentHeader from '../components/incident/IncidentHeader';
 import MediaGallery from '../components/incident/MediaGallery';
 import VerificationSummary from '../components/incident/VerificationSummary';
@@ -14,10 +15,18 @@ export default function IncidentDetailPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        setIncident(await fetchIncident(id));
+        const data = await fetchIncident(id);
+        if (data) {
+          setIncident(data);
+          return;
+        }
+        const mock = mockIncidents.find((i) => i.id === id);
+        setIncident(mock || null);
       } catch {
-        setIncident(null);
+        const mock = mockIncidents.find((i) => i.id === id);
+        setIncident(mock || null);
       } finally {
         setLoading(false);
       }
@@ -55,11 +64,11 @@ export default function IncidentDetailPage() {
       <button className="back-link" onClick={() => navigate('/app/dashboard')}>← Back to Map</button>
       <div className="detail-grid">
         <div>
-          <IncidentHeader incident={incident} />
+          <IncidentHeader incident={incident} onIncidentUpdate={setIncident} />
         </div>
         <div>
           <MediaGallery count={incident.mediaCount} mediaUrls={incident.mediaUrls} />
-          <VerificationSummary incident={incident} />
+          <VerificationSummary incident={incident} onIncidentUpdate={setIncident} />
         </div>
       </div>
     </div>

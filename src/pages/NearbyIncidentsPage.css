@@ -16,8 +16,64 @@
 .osm-popup strong { font-size: 13px; display: block; margin-bottom: 4px; }
 .osm-popup p { font-size: 12px; color: #444; margin: 2px 0; }
 .osm-popup-meta { color: #666 !important; }
+
+.osm-popup-actions {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.osm-quick-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.osm-quick-btn:hover {
+  background: #ffffff;
+  border-color: #94a3b8;
+}
+
+.osm-quick-btn.btn-confirm.voted {
+  background: #f0fdf4;
+  border-color: #10b981;
+  color: #047857;
+  font-weight: 700;
+}
+
+.osm-quick-btn.btn-dispute.voted {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.osm-popup-gatenote {
+  margin: 6px 0;
+  padding: 4px 6px;
+  background: #f1f5f9;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+}
+
 .osm-popup-link {
-  margin-top: 8px; display: inline-block;
+  margin-top: 4px; display: inline-block;
   font-size: 12px; font-weight: 600; color: #2563eb;
   background: none; border: none; cursor: pointer; padding: 0;
   text-decoration: underline;
