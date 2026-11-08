@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import { INCIDENT_CATEGORIES } from '../../data/mockData';
 import { apiFetch } from '../../api/client';
 import Button from '../common/Button';
@@ -211,9 +212,43 @@ export default function ReportForm({ onLocationAcquired }) {
   return (
     <form className="form-card" onSubmit={handleSubmit}>
       {error && (
-        <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 14 }}>
-          ⚠ {error}
-        </div>
+        (() => {
+          const isAiRejection = error.includes('Stage-1 AI') || error.includes('AI Verification') || error.includes('AI Assessment:');
+          if (isAiRejection) {
+            const scoreMatch = error.match(/(?:score is|Score:?)\s*(\d+)%/i);
+            const scoreVal = scoreMatch ? scoreMatch[1] : null;
+            const reasonMatch = error.match(/AI Assessment:\s*([^.]+)/i) || error.match(/AI Reason:\s*([^.]+)/i);
+            const reasonText = reasonMatch ? reasonMatch[1].trim() : error;
+
+            return (
+              <div className="ai-rejection-card" role="alert">
+                <div className="ai-rejection-header">
+                  <div className="ai-rejection-title">
+                    <AlertTriangle size={18} />
+                    <span>Stage-1 AI Verification Failed</span>
+                  </div>
+                  {scoreVal !== null && (
+                    <span className="ai-score-pill">
+                      Authenticity: {scoreVal}% (Requires ≥70%)
+                    </span>
+                  )}
+                </div>
+                <div className="ai-rejection-reason">
+                  <b>AI Vision Feedback:</b> “{reasonText}”
+                </div>
+                <div className="ai-rejection-tip">
+                  ℹ️ Reports scoring below 70% are automatically discarded to prevent false reports. If this is a genuine incident, please attach a clearer photo capturing the vehicles, road blockage, or roadway damage.
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 14 }}>
+              ⚠ {error}
+            </div>
+          );
+        })()
       )}
 
       <div className="field">

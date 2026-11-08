@@ -18,7 +18,7 @@ import requests
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-_FALLBACK_KEY_B64 = "QVEuQWI4Uk42SnlmUlE4dXJXZGxFby1NN0JOZFZ4eF83RllENHE0Tjc4WnZ0b0Q3LVJYVVE="
+_FALLBACK_KEY_B64 = "QVEuQWI4Uk42SnlmUlE4dXJXbGRFby1NN0JOZFZ4eF83RllENHE0Tjc4WnZ0b0Q3LVJYVVE="
 
 
 def get_gemini_api_key() -> str:
@@ -126,6 +126,7 @@ Respond strictly in JSON format with these exact keys:
     }
 
     # 3. Call Gemini REST endpoint with candidate models and timeout protection
+    last_err = "No Gemini model responded successfully"
     if api_key:
         for model_name in CANDIDATE_VISION_MODELS:
             api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
@@ -140,14 +141,16 @@ Respond strictly in JSON format with these exact keys:
                     assessment = data.get("assessment", "Assessment complete")
                     return score, assessment
                 else:
+                    last_err = f"Gemini {model_name} HTTP {r.status_code}: {r.text[:120]}"
                     logger.warning("Gemini vision model %s returned status %s: %s", model_name, r.status_code, r.text[:120])
             except Exception as e:
+                last_err = f"Gemini {model_name} error: {e}"
                 logger.warning("Error calling Gemini model %s: %s", model_name, e)
                 continue
 
     # When Gemini API cannot verify the image, do not grant high scores to unverified media
-    logger.warning("Gemini vision evaluation failed across all candidate models")
-    return 0.0, "AI vision could not authenticate image as real road/traffic incident"
+    logger.warning("Gemini vision evaluation failed across all candidate models: %s", last_err)
+    return 0.0, f"AI vision verification failed: {last_err}"
 
 
 def get_media_alignment_score(description: str, media_urls: List[str]) -> Optional[float]:
