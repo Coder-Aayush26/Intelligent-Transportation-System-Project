@@ -94,6 +94,17 @@
   font-weight: 700;
 }
 
+.osm-popup-gatenote {
+  margin: 6px 0;
+  padding: 4px 6px;
+  background: #f1f5f9;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+}
+
 .osm-popup-link {
   margin-top: 4px; display: inline-block;
   font-size: 12px; font-weight: 600; color: var(--neon, #2563eb);

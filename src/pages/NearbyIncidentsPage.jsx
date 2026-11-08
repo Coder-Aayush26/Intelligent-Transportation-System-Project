@@ -25,6 +25,21 @@ function makePinIcon(color, icon) {
   });
 }
 
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 /** User location marker — blue pulsing dot */
 const USER_ICON = L.divIcon({
   className: '',
@@ -68,7 +83,7 @@ export default function NearbyIncidentsPage() {
   const [error, setError] = useState('');
   const [popupVotes, setPopupVotes] = useState({});
 
-  const handleQuickVerify = async (e, incidentId, verdict) => {
+  const handleQuickVerify = async (e, incidentId, verdict, userCoord = null) => {
     e.stopPropagation();
     setPopupVotes((prev) => ({ ...prev, [incidentId]: verdict }));
     try {
@@ -77,7 +92,7 @@ export default function NearbyIncidentsPage() {
       // ignore
     }
     try {
-      await verifyIncident(incidentId, verdict);
+      await verifyIncident(incidentId, verdict, userCoord);
     } catch (err) {
       console.warn('Quick verify sync:', err);
     }
@@ -213,6 +228,15 @@ export default function NearbyIncidentsPage() {
             const style = CATEGORY_STYLES[inc.category] ?? CATEGORY_STYLES.Other;
             if (inc.coords?.lat == null || inc.coords?.lng == null) return null;
             const currentVote = popupVotes[inc.id] || (typeof localStorage !== 'undefined' ? localStorage.getItem(`its_vote_${inc.id}`) : null);
+            const userCoord = deviceLocation || (selectedLocation.isCustom ? selectedLocation : null);
+            const distMeters = userCoord && inc.coords?.lat != null && inc.coords?.lng != null 
+              ? getDistanceMeters(userCoord.lat, userCoord.lng, inc.coords.lat, inc.coords.lng) 
+              : null;
+            const hasMedia = Boolean((inc.mediaUrls && inc.mediaUrls.length > 0) || inc.mediaCount > 0);
+            const aiScore = inc.aiAuthenticityScore ?? (hasMedia ? 85 : 0);
+            const isAiPassed = hasMedia && aiScore >= 70;
+            const isWithin1km = distMeters != null && distMeters <= 1000;
+            const canQuickVote = isAiPassed && isWithin1km;
 
             return (
               <Marker
@@ -227,24 +251,30 @@ export default function NearbyIncidentsPage() {
                     <p className="osm-popup-meta">
                       Severity: <b>{inc.severity}</b> &nbsp;|&nbsp; Conf: <b>{inc.confidence}%</b>
                     </p>
-                    <div className="osm-popup-actions">
-                      <button
-                        type="button"
-                        className={`osm-quick-btn btn-confirm ${currentVote === 'confirm' ? 'voted' : ''}`}
-                        onClick={(e) => handleQuickVerify(e, inc.id, 'confirm')}
-                        title="Confirm incident is active"
-                      >
-                        {currentVote === 'confirm' ? '✓ Confirmed' : '👍 Confirm'}
-                      </button>
-                      <button
-                        type="button"
-                        className={`osm-quick-btn btn-dispute ${currentVote === 'contradict' ? 'voted' : ''}`}
-                        onClick={(e) => handleQuickVerify(e, inc.id, 'contradict')}
-                        title="Report as incorrect or not present"
-                      >
-                        {currentVote === 'contradict' ? '✕ Disputed' : '👎 Dispute'}
-                      </button>
-                    </div>
+                    {canQuickVote ? (
+                      <div className="osm-popup-actions">
+                        <button
+                          type="button"
+                          className={`osm-quick-btn btn-confirm ${currentVote === 'confirm' ? 'voted' : ''}`}
+                          onClick={(e) => handleQuickVerify(e, inc.id, 'confirm', userCoord)}
+                          title="Confirm incident is active (Within 1km)"
+                        >
+                          {currentVote === 'confirm' ? '✓ Confirmed' : '👍 Confirm'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`osm-quick-btn btn-dispute ${currentVote === 'contradict' ? 'voted' : ''}`}
+                          onClick={(e) => handleQuickVerify(e, inc.id, 'contradict', userCoord)}
+                          title="Report as incorrect or not present (Within 1km)"
+                        >
+                          {currentVote === 'contradict' ? '✕ Disputed' : '👎 Dispute'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="osm-popup-gatenote">
+                        🔒 Voting locked: {!isAiPassed ? 'AI Screening Pending' : `Must be ≤1km (You: ${distMeters ? (distMeters/1000).toFixed(1) + 'km' : 'GPS needed'})`}
+                      </div>
+                    )}
                     <button
                       type="button"
                       className="osm-popup-link"

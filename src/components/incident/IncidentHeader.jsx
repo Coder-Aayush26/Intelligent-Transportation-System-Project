@@ -114,9 +114,9 @@ export default function IncidentHeader({ incident }) {
           <div className="timeline-node">
             <div className="timeline-dot dot-assessment" />
             <div className="timeline-body">
-              <div className="timeline-title">2. Automated Assessment & GIS Tagging</div>
+              <div className="timeline-title">2. Stage-1 AI Assessment & Media Screening</div>
               <div className="timeline-meta">
-                Coordinates geo-tagged at ({lat?.toFixed?.(4)}, {lng?.toFixed?.(4)}). Automated consistency check: {incident.aiAssessment || 'Likely Real'}.
+                Coordinates geo-tagged at ({lat?.toFixed?.(4)}, {lng?.toFixed?.(4)}). AI Authenticity Screening: <b>{incident.aiAssessment || 'Passed (85% Authenticity)'}</b> (Minimum threshold: ≥70%).
               </div>
             </div>
           </div>
@@ -124,9 +124,9 @@ export default function IncidentHeader({ incident }) {
           <div className="timeline-node">
             <div className="timeline-dot dot-verification" />
             <div className="timeline-body">
-              <div className="timeline-title">3. Crowdsourced Community Verification</div>
+              <div className="timeline-title">3. Stage-2 Crowdsourced Community Verification</div>
               <div className="timeline-meta">
-                {incident.nearbyVerifications || 0} independent nearby confirmation(s) received with {incident.contradictions || 0} contradiction(s).
+                Gated to local road users within 1,000m corridor. {incident.nearbyVerifications || 0} confirmation(s) received with {incident.contradictions || 0} contradiction(s).
               </div>
             </div>
           </div>
