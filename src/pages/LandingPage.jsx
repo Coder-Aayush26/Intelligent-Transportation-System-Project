@@ -117,6 +117,27 @@ export default function LandingPage() {
           <a href="#about">About</a>
         </div>
         <div className="actions">
+          <Link
+            to="/authority"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: '#d97706',
+              background: '#fef3c7',
+              border: '1px solid #fde68a',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              textDecoration: 'none',
+              letterSpacing: '0.02em',
+              transition: 'all 0.2s',
+            }}
+            title="Restricted Administrative & Emergency Operations Portal"
+          >
+            <span>🛡 Authority Portal</span>
+          </Link>
           <Button as={Link} to="/login" variant="outline" size="sm">Login</Button>
           <Button as={Link} to="/register" size="sm">Get Started</Button>
         </div>

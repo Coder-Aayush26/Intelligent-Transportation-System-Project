@@ -118,6 +118,21 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const loginAuthority = useCallback(async (credentials) => {
+    const data = await apiFetch('/auth/authority-login', {
+      method: 'POST',
+      body: JSON.stringify({
+        identifier: credentials.identifier,
+        password: credentials.password || 'Official@2025',
+        passkey: credentials.passkey,
+        department: credentials.department || 'Indore Traffic Police Control Room',
+        badge_number: credentials.badgeNumber || 'IND-TP-01',
+      }),
+    });
+    _persist(data.access_token, data.user);
+    return data.user;
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiFetch('/auth/logout', { method: 'POST' });
@@ -146,6 +161,7 @@ export function AuthProvider({ children }) {
         user,
         login,
         register,
+        loginAuthority,
         logout,
         updateAuthUser,
         isLoggedIn: !!token,

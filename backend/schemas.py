@@ -50,6 +50,13 @@ class IncidentOut(BaseModel):
     contradictions: int = 0
     avgReliability: float = 0.0
     mapPosition: dict = {}
+    status: str = "Active"
+    resolutionNotes: Optional[str] = None
+    actionTaken: Optional[str] = None
+    resolvedAt: Optional[str] = None
+    resolvedBy: Optional[str] = None
+    assignedUnit: Optional[str] = None
+    isActive: bool = True
 
     @classmethod
     def from_mongo_doc(cls, inc: dict, verif_list: list[dict]):
@@ -60,6 +67,13 @@ class IncidentOut(BaseModel):
         media_list = inc.get("media_urls", [])
         has_media = bool(media_list and len(media_list) > 0) or (inc.get("media_count", 0) > 0)
         
+        resolved_at = inc.get("resolved_at")
+        is_active_val = inc.get("is_active", 1) in (1, True)
+        
+        status_val = inc.get("status")
+        if not status_val:
+            status_val = "Active" if is_active_val else "Resolved"
+
         # Retrieve AI assessment details directly from Gemini Vision evaluation
         ai_score = inc.get("ai_authenticity_score")
         if ai_score is None:
@@ -96,7 +110,22 @@ class IncidentOut(BaseModel):
             contradictions=contradictions,
             avgReliability=4.0,
             mapPosition={"top": inc.get("map_position_top", "50%"), "left": inc.get("map_position_left", "50%")},
+            status=status_val,
+            resolutionNotes=inc.get("resolution_notes"),
+            actionTaken=inc.get("action_taken"),
+            resolvedAt=_format_dt(resolved_at) if resolved_at else None,
+            resolvedBy=inc.get("resolved_by"),
+            assignedUnit=inc.get("assigned_unit"),
+            isActive=is_active_val,
         )
+
+
+class IncidentResolutionUpdate(BaseModel):
+    status: str  # "Active" | "Dispatched" | "In Progress" | "Resolved" | "False Alarm"
+    resolution_notes: Optional[str] = None
+    action_taken: Optional[str] = None
+    assigned_unit: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 # ---------- Verification ----------
@@ -158,6 +187,7 @@ class UserOut(BaseModel):
     scoreFactors: list[str] = []
     recentActivity: list[dict] = []
     settings: Optional[Dict[str, Any]] = None
+    role: Optional[str] = "citizen"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     lat: Optional[float] = None

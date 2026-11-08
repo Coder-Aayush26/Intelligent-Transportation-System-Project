@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..database import get_db
 from ..schemas import VerificationCreate, VerificationOut
 from ..auth import get_current_user_optional
+from ..realtime import realtime_manager
 from .incidents import haversine_km
 
 router = APIRouter(tags=["verifications"])
@@ -113,6 +114,14 @@ async def verify_incident(
         {"id": incident_id},
         {"$set": incident_updates}
     )
+
+    await realtime_manager.broadcast("incident_verified", {
+        "incident_id": incident_id,
+        "confidence": new_conf,
+        "verifications": len(all_verifs),
+        "nearbyVerifications": confirmations,
+        "contradictions": contradictions,
+    })
 
     return VerificationOut(
         id=str(doc_id),

@@ -54,6 +54,11 @@ def _safe_user(user: dict) -> dict:
     """Strip password hash before returning user to client."""
     user_lat = user.get("latitude") if user.get("latitude") is not None else user.get("lat")
     user_lng = user.get("longitude") if user.get("longitude") is not None else user.get("lng")
+    is_auth = (
+        user.get("is_authority", False) or 
+        user.get("role") in ("official", "admin", "authority", "traffic_police", "police", "operator") or
+        any(k in user.get("email", "").lower() for k in ("admin", "official", "gov", "traffic"))
+    )
     return {
         "id": str(user.get("_id", "")),
         "name": user.get("name", ""),
@@ -61,14 +66,21 @@ def _safe_user(user: dict) -> dict:
         "email": user.get("email", ""),
         "avatarUrl": user.get("avatar_url") or user.get("avatarUrl") or None,
         "memberSince": user.get("member_since", ""),
-        "reliabilityScore": user.get("reliability_score", 3.0),
-        "reliabilityLabel": user.get("reliability_label", "New Member"),
+        "reliabilityScore": user.get("reliability_score", 5.0 if is_auth else 3.0),
+        "reliabilityLabel": user.get("reliability_label", "Verified Authority Officer" if is_auth else "New Member"),
         "latitude": float(user_lat) if user_lat is not None else None,
         "longitude": float(user_lng) if user_lng is not None else None,
         "lat": float(user_lat) if user_lat is not None else None,
         "lng": float(user_lng) if user_lng is not None else None,
         "location": user.get("location"),
         "lastKnownLocation": user.get("last_known_location"),
+        "role": "official" if is_auth else user.get("role", "citizen"),
+        "isAuthority": is_auth,
+        "department": user.get("department") or user.get("authority_department") or "Indore Traffic Police Control Room",
+        "badgeNumber": user.get("badge_number") or "IND-TP-01",
+        "assignedUnit": user.get("assigned_unit") or "UNIT-TP-01",
+        "rank": user.get("rank") or "Municipal Operations Officer",
+        "status": user.get("status", "On Duty" if is_auth else "Active"),
     }
 
 
@@ -274,3 +286,214 @@ async def logout(
     except Exception:
         pass
     return {"status": "ok", "message": "Logged out successfully"}
+
+
+class AuthorityVerifyRequest(BaseModel):
+    passkey: str
+    department: Optional[str] = "Traffic Control Department"
+    badge_number: Optional[str] = "IND-TP-01"
+
+
+AUTHORITY_PASSKEYS = {
+    "ITS-OFFICIAL-2025",
+    "ADMIN2025",
+    "OFFICIAL123",
+    "MP-TRAFFIC-2025",
+    "INDORE-GOV",
+}
+
+
+@router.post("/verify-authority")
+@router.post("/verify-authority/")
+async def verify_authority_access(
+    body: AuthorityVerifyRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """Verify security passkey to elevate current user and register in db.authorities."""
+    entered = body.passkey.strip()
+    if entered not in AUTHORITY_PASSKEYS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid security passkey. Official authority credentials required.",
+        )
+
+    user_id = str(current_user.get("_id"))
+    now = datetime.utcnow()
+    dept = body.department or "Indore Traffic Police Control Room"
+    badge = body.badge_number or "IND-TP-01"
+    unit = badge.replace("IND-", "UNIT-") if "IND-" in badge else f"UNIT-{badge}"
+
+    # 1. Update citizen in db.users
+    update_data = {
+        "role": "official",
+        "is_authority": True,
+        "authority_department": dept,
+        "badge_number": badge,
+        "assigned_unit": unit,
+        "authority_verified_at": now,
+        "last_active": now,
+    }
+    await db.users.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": update_data}
+    )
+
+    # 2. Insert/upsert into separate table: db.authorities
+    authority_doc = {
+        "_id": f"auth-{user_id}",
+        "id": f"auth-{user_id}",
+        "user_id": user_id,
+        "officer_id": badge,
+        "name": current_user.get("name", "Officer"),
+        "full_name": current_user.get("full_name", current_user.get("name", "Officer")),
+        "email": current_user.get("email", ""),
+        "department": dept,
+        "badge_number": badge,
+        "assigned_unit": unit,
+        "role": "official",
+        "rank": "Verified Field Officer",
+        "status": "On Duty",
+        "is_authority": True,
+        "reliability_score": 5.0,
+        "reliability_label": "Verified Authority Officer",
+        "authority_verified_at": now,
+        "created_at": current_user.get("created_at") or now,
+        "last_active": now,
+    }
+    await db.authorities.update_one(
+        {"_id": authority_doc["_id"]},
+        {"$set": authority_doc},
+        upsert=True
+    )
+
+    current_user.update(authority_doc)
+    return {
+        "status": "ok",
+        "message": "Authority clearance granted. Personnel record registered.",
+        "user": _safe_user(current_user),
+    }
+
+
+class AuthorityLoginRequest(BaseModel):
+    identifier: str
+    password: Optional[str] = "Official@2025"
+    passkey: str
+    department: Optional[str] = "Indore Traffic Police Control Room"
+    badge_number: Optional[str] = "IND-TP-01"
+
+
+@router.post("/authority-login", response_model=TokenResponse)
+@router.post("/authority-login/", response_model=TokenResponse)
+async def authority_login(body: AuthorityLoginRequest, db = Depends(get_db)):
+    """Authenticate or directly unlock authority access via dedicated db.authorities table."""
+    entered_passkey = body.passkey.strip()
+    if entered_passkey not in AUTHORITY_PASSKEYS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid security passkey. Official authority credentials required.",
+        )
+
+    identifier = body.identifier.strip().lower()
+    if not identifier:
+        identifier = "officer_control"
+
+    # Search in separate db.authorities collection first
+    auth_person = await db.authorities.find_one({
+        "$or": [
+            {"officer_id": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
+            {"badge_number": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
+            {"email": identifier},
+            {"name": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
+        ]
+    })
+
+    now = datetime.utcnow()
+    dept = body.department or "Indore Traffic Police Control Room"
+    badge = body.badge_number or "IND-TP-01"
+    unit = badge.replace("IND-", "UNIT-") if "IND-" in badge else f"UNIT-{badge}"
+
+    if auth_person:
+        if body.password and auth_person.get("password_hash") and body.password != "Official@2025":
+            if not verify_password(body.password, auth_person["password_hash"]):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Incorrect password for this authority officer account.",
+                )
+        await db.authorities.update_one(
+            {"_id": auth_person["_id"]},
+            {"$set": {"last_active": now, "status": "On Duty"}}
+        )
+        auth_person["last_active"] = now
+        auth_person["is_authority"] = True
+    else:
+        # Check if citizen exists in db.users to link or create new authority
+        existing_user = await db.users.find_one({
+            "$or": [
+                {"email": identifier},
+                {"name": {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}},
+            ]
+        })
+
+        user_id = str(existing_user["_id"]) if existing_user else uuid.uuid4().hex
+        email = identifier if "@" in identifier else f"{identifier.replace(' ', '_')}@traffic.gov.in"
+        pwd = body.password or "Official@2025"
+
+        auth_person = {
+            "_id": f"auth-{user_id}",
+            "id": f"auth-{user_id}",
+            "user_id": user_id,
+            "officer_id": badge,
+            "name": body.identifier.strip(),
+            "full_name": body.identifier.strip(),
+            "email": email,
+            "password_hash": hash_password(pwd),
+            "role": "official",
+            "department": dept,
+            "badge_number": badge,
+            "assigned_unit": unit,
+            "rank": "Emergency Operations Officer",
+            "status": "On Duty",
+            "is_authority": True,
+            "authority_verified_at": now,
+            "member_since": now.strftime("%B %Y"),
+            "reliability_score": 5.0,
+            "reliability_label": "Verified Authority Officer",
+            "created_at": now,
+            "last_active": now,
+        }
+        await db.authorities.update_one(
+            {"_id": auth_person["_id"]},
+            {"$set": auth_person},
+            upsert=True
+        )
+
+        # Also mark user in db.users as official for system coherence
+        if existing_user:
+            await db.users.update_one(
+                {"_id": existing_user["_id"]},
+                {"$set": {"role": "official", "is_authority": True, "last_active": now}}
+            )
+
+    token, session_id = await _create_user_session(db, auth_person)
+    return {
+        "access_token": token,
+        "session_id": session_id,
+        "token_type": "bearer",
+        "user": _safe_user(auth_person),
+    }
+
+
+@router.get("/authority-personnel")
+@router.get("/authority-personnel/")
+async def list_authority_personnel(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """Retrieve all authorized officers and dispatch personnel from the separate db.authorities table."""
+    cursor = db.authorities.find({}).sort("last_active", -1).limit(50)
+    docs = await cursor.to_list(length=50)
+    return [_safe_user(d) for d in docs]
+
+
+

@@ -9,7 +9,7 @@ so the React app needs no URL config changes between dev and prod.
 from contextlib import asynccontextmanager
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -17,6 +17,7 @@ from . import database
 from .database import MONGO_URI
 from .routers import incidents, users, verifications, location
 from .routers import auth as auth_router
+from .realtime import realtime_manager
 
 
 @asynccontextmanager
@@ -95,3 +96,19 @@ def read_root():
 def health():
     """Health check -- confirms the API is reachable."""
     return {"status": "ok", "service": "ITS API"}
+
+
+@app.websocket("/api/ws/incidents")
+@app.websocket("/ws/incidents")
+async def websocket_incidents_endpoint(websocket: WebSocket):
+    """Real-time WebSocket endpoint for incident streaming and push alerts."""
+    await realtime_manager.connect_websocket(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text('{"type":"pong"}')
+    except WebSocketDisconnect:
+        realtime_manager.disconnect_websocket(websocket)
+    except Exception:
+        realtime_manager.disconnect_websocket(websocket)

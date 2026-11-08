@@ -117,6 +117,7 @@ class MockDatabase:
         self.sessions = InMemoryCollection()
         self.incidents = InMemoryCollection()
         self.verifications = InMemoryCollection()
+        self.authorities = InMemoryCollection()
 
 
 @pytest.fixture

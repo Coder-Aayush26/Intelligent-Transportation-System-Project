@@ -45,8 +45,11 @@ export async function apiFetch(path, options = {}) {
     ...options.headers,
   };
 
+  const isDev = Boolean(import.meta.env.DEV);
   const primaryUrl = `${BASE}${cleanPath}`;
   const cloudUrl = `${CLOUD_API_ORIGIN}/api${cleanPath}`;
+  const directLocalUrl = `http://127.0.0.1:8000/api${cleanPath}`;
+  const failoverUrl = isDev ? directLocalUrl : cloudUrl;
   let res;
   const maxAttempts = 3;
 
@@ -54,11 +57,11 @@ export async function apiFetch(path, options = {}) {
     try {
       res = await execFetch(primaryUrl, options, headers);
     } catch {
-      // If primary fetch fails (network error, CORS, or dead proxy), try cloud backend directly
+      // If primary fetch fails (network error, socket drop, or dead proxy), try direct local or cloud backend
       try {
-        const cloudRes = await execFetch(cloudUrl, options, headers);
-        if (cloudRes.ok) {
-          res = cloudRes;
+        const fallbackRes = await execFetch(failoverUrl, options, headers);
+        if (fallbackRes.ok) {
+          res = fallbackRes;
           break;
         }
       } catch {
@@ -69,28 +72,31 @@ export async function apiFetch(path, options = {}) {
         if (cache.has(cacheKey)) {
           return cache.get(cacheKey).data;
         }
-        throw new Error('Unable to connect to the server. Please check your network connection.');
+        throw new Error(isDev 
+          ? 'Unable to connect to local backend (http://127.0.0.1:8000). Please ensure Uvicorn is active.' 
+          : 'Unable to connect to the server. Please check your network connection.'
+        );
       }
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
+      await new Promise((r) => setTimeout(r, 600 * attempt));
       continue;
     }
 
     // If 502 (Bad Gateway), 504 (Gateway Timeout), or 404 (proxy rewrite mismatch)
     if (res.status === 502 || res.status === 504 || res.status === 404) {
-      // If primary returned a gateway/proxy error, attempt cloud backend directly
+      // If primary returned a gateway/proxy error, attempt direct local (dev) or cloud backend directly
       try {
-        const cloudRes = await execFetch(cloudUrl, options, headers);
-        if (cloudRes.ok) {
-          res = cloudRes;
+        const fallbackRes = await execFetch(failoverUrl, options, headers);
+        if (fallbackRes.ok) {
+          res = fallbackRes;
           break;
         }
       } catch {
         // continue to retry
       }
 
-      // If server is waking up on Render (free-tier cold start), wait and retry
+      // If server is starting up, wait briefly and retry
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 1500 * attempt));
+        await new Promise((r) => setTimeout(r, 800 * attempt));
         continue;
       }
     }
@@ -112,7 +118,9 @@ export async function apiFetch(path, options = {}) {
         if (text) {
           if (text.includes('<!DOCTYPE') || text.includes('<html') || res.status === 502 || res.status === 504) {
             if (res.status === 502 || res.status === 504) {
-              errorDetail = 'The server is currently waking up or starting. Please wait a few seconds and try again.';
+              errorDetail = isDev 
+                ? 'Backend service is starting up on http://127.0.0.1:8000. Retrying...' 
+                : 'The server is currently waking up or starting. Please wait a few seconds and try again.';
             } else {
               errorDetail = `Service endpoint not found (${res.status} at ${path}). Please check backend status.`;
             }
@@ -126,7 +134,9 @@ export async function apiFetch(path, options = {}) {
     }
 
     if (!errorDetail && (res.status === 502 || res.status === 504)) {
-      errorDetail = 'The server is currently waking up or starting. Please wait a few seconds and try again.';
+      errorDetail = isDev 
+        ? 'Backend service is starting up on http://127.0.0.1:8000. Retrying...' 
+        : 'The server is currently waking up or starting. Please wait a few seconds and try again.';
     }
 
     throw new Error(errorDetail || `Request failed with status ${res.status}`);
