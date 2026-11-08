@@ -163,11 +163,19 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
       </div>
 
       <div className="verif-metrics-list">
-        <div className="verif-row">
-          <span className="verif-label">Stage 1: AI Authenticity Screening</span>
-          <span className={isAiApproved ? 'check-ok' : 'check-warn'}>
-            {isAiApproved ? `✓ Passed (${aiScore}%)` : `⚠ Pending Media / Below 70% (${aiScore}%)`}
-          </span>
+        <div className="verif-row verif-row-ai">
+          <div className="verif-row-top">
+            <span className="verif-label">Stage 1: AI Authenticity Screening</span>
+            <span className={isAiApproved ? 'check-ok' : 'check-warn'}>
+              {isAiApproved ? `✓ Passed (${aiScore}%)` : `⚠ Flagged / Below 70% (${aiScore}%)`}
+            </span>
+          </div>
+          {incident.aiAssessment && (
+            <div className="verif-ai-response">
+              <span className="verif-ai-tag">Gemini Multimodal Vision</span>
+              <span className="verif-ai-text">“{incident.aiAssessment}”</span>
+            </div>
+          )}
         </div>
         <div className="verif-row">
           <span className="verif-label">Stage 2: Community Confirmations</span>

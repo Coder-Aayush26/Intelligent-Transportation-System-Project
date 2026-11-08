@@ -39,6 +39,47 @@
   font-size: 12.5px;
 }
 
+.verif-row-ai {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.verif-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.verif-ai-response {
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text, #1e293b);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.verif-ai-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.verif-ai-text {
+  font-style: italic;
+  color: #334155;
+}
+
 .verif-row:last-child {
   border-bottom: none;
 }

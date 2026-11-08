@@ -148,8 +148,6 @@ async def create_incident(
         ai_assessment = ai_assessment or "Media could not be evaluated by AI"
 
     ai_verified = ai_score >= 70
-    if ai_assessment and not ai_assessment.startswith(("Passed", "Flagged")):
-        ai_assessment = f"Passed ({ai_score}% Authenticity): {ai_assessment}" if ai_verified else f"Flagged ({ai_score}% Authenticity): {ai_assessment}"
 
     initial_confidence = compute_total_confidence(
         media_score=media_score if media_score is not None else (ai_score / 100.0),
@@ -418,22 +416,42 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
 
-    # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand with Gemini Vision
+    # On-demand live Gemini Vision evaluation if media exists and needs assessment
     media_score = inc.get("media_score")
-    if media_score is None and inc.get("media_urls"):
+    old_heuristics = [
+        "Photograph attached substantiating reported roadway condition.",
+        "Visual evidence confirms roadway water accumulation and impeded drainage.",
+        "Visual evidence confirms vehicle density and traffic congestion along roadway.",
+        "Visual evidence indicates road obstacle and roadway obstruction matching hazard report.",
+        "Visual evidence confirms vehicle impact and damage consistent with reported accident.",
+        "Automated assessment temporarily unavailable",
+        "Pending",
+    ]
+    curr_assess = str(inc.get("ai_assessment") or "")
+    needs_gemini = bool(inc.get("media_urls")) and (
+        media_score is None or
+        inc.get("ai_authenticity_score") is None or
+        any(h in curr_assess for h in old_heuristics) or
+        curr_assess.startswith("Passed (")
+    )
+
+    if needs_gemini:
         m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
         if m_score is not None:
             media_score = m_score
             inc["media_score"] = m_score
             ai_score = max(0, min(100, int(m_score * 100)))
             ai_verified = ai_score >= 70
-            if a_assess and not a_assess.startswith(("Passed", "Flagged")):
-                a_assess = f"Passed ({ai_score}% Authenticity): {a_assess}" if ai_verified else f"Flagged ({ai_score}% Authenticity): {a_assess}"
             stage_val = "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending"
             inc["ai_assessment"] = a_assess
             inc["ai_authenticity_score"] = ai_score
             inc["ai_verified"] = ai_verified
             inc["stage"] = stage_val
+            inc["confidence"] = compute_total_confidence(
+                media_score=media_score,
+                verif_list=verif,
+                user=None,
+            )
             await db.incidents.update_one(
                 {"id": inc["id"]},
                 {"$set": {
@@ -442,6 +460,7 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
                     "ai_authenticity_score": ai_score,
                     "ai_verified": ai_verified,
                     "stage": stage_val,
+                    "confidence": inc["confidence"],
                 }}
             )
 

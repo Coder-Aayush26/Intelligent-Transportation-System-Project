@@ -60,17 +60,17 @@ class IncidentOut(BaseModel):
         media_list = inc.get("media_urls", [])
         has_media = bool(media_list and len(media_list) > 0) or (inc.get("media_count", 0) > 0)
         
-        # Calculate AI Authenticity score: default 85% if media present, 0% if absent
+        # Retrieve AI assessment details directly from Gemini Vision evaluation
         ai_score = inc.get("ai_authenticity_score")
         if ai_score is None:
-            ai_score = 85 if has_media else 0
+            if inc.get("media_score") is not None:
+                ai_score = int(inc["media_score"] * 100)
+            else:
+                ai_score = 0
 
-        ai_assessment = inc.get("ai_assessment")
-        if not ai_assessment or ai_assessment == "Pending":
-            ai_assessment = f"Passed ({ai_score}% Authenticity)" if ai_score >= 70 else "Pending Media Upload"
-
-        ai_verified = bool(ai_score >= 70 and has_media)
-        stage = "Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending"
+        ai_assessment = inc.get("ai_assessment") or "Pending AI Evaluation"
+        ai_verified = bool(inc.get("ai_verified", ai_score >= 70 and has_media))
+        stage = inc.get("stage") or ("Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending")
 
         return cls(
             id=inc.get("id") or str(inc.get("_id", "")),
