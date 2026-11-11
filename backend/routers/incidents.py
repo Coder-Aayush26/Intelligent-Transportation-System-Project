@@ -29,6 +29,61 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * c
 
 
+def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate exact great-circle distance between two coordinates in metres."""
+    return haversine_km(lat1, lon1, lat2, lon2) * 1000.0
+
+
+# Maximum lifespan (in hours) of active incidents before automatic expiration
+EXPIRY_HOURS_PER_CATEGORY = {
+    "Traffic Jam": 3.0,       # 3 hours without activity -> expired
+    "Accident": 6.0,          # 6 hours without activity -> expired
+    "Waterlogging": 24.0,     # 24 hours without activity -> expired
+    "Road Blockage": 24.0,    # 24 hours without activity -> expired
+    "Road Closure": 48.0,     # 48 hours without activity -> expired
+    "Road Hazard": 48.0,      # 48 hours without activity -> expired
+    "Construction": 72.0,     # 72 hours without activity -> expired
+    "Other": 12.0,            # 12 hours default
+}
+
+DUPLICATE_DISTANCE_THRESHOLD_METERS = 100.0
+
+
+async def auto_expire_stale_incidents(db, now: Optional[datetime] = None) -> int:
+    """Check active incidents and transition any past their category expiry threshold to expired status.
+
+    Preserves all reporting details, reports, and history in the database while deactivating from live map.
+    """
+    current_dt = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    cursor = db.incidents.find({"is_active": {"$in": [1, True]}})
+    active_incidents = await cursor.to_list(length=500)
+    expired_count = 0
+
+    for inc in active_incidents:
+        category = inc.get("category", "Other")
+        expiry_hours = EXPIRY_HOURS_PER_CATEGORY.get(category, 12.0)
+        ref_time = inc.get("last_activity_at") or inc.get("reported_at_full")
+        if ref_time:
+            if isinstance(ref_time, datetime):
+                if ref_time.tzinfo is not None:
+                    ref_time = ref_time.astimezone(timezone.utc).replace(tzinfo=None)
+                elapsed_hours = (current_dt - ref_time).total_seconds() / 3600.0
+                if elapsed_hours >= expiry_hours:
+                    await db.incidents.update_one(
+                        {"id": inc["id"]},
+                        {"$set": {
+                            "is_active": 0,
+                            "status": "expired",
+                            "expired_at": current_dt,
+                        }}
+                    )
+                    inc["is_active"] = 0
+                    inc["status"] = "expired"
+                    expired_count += 1
+
+    return expired_count
+
+
 def _validate_coords(lat: Optional[float], lng: Optional[float]):
     if lat is not None and not (-90.0 <= lat <= 90.0):
         raise HTTPException(
@@ -42,8 +97,23 @@ def _validate_coords(lat: Optional[float], lng: Optional[float]):
         )
 
 
+def _evaluate_incident_confidence(inc: dict, verif_list: list, current_time: Optional[datetime] = None) -> int:
+    """Compute confidence dynamically using full 6-factor model."""
+    return compute_total_confidence(
+        description=inc.get("description", ""),
+        media_urls=inc.get("media_urls"),
+        verif_list=verif_list,
+        media_score=inc.get("media_score"),
+        report_count=inc.get("report_count", 1),
+        reporter_reliability=inc.get("reporter_reliability"),
+        category=inc.get("category", "Other"),
+        reported_at=inc.get("last_activity_at") or inc.get("reported_at_full"),
+        current_time=current_time,
+    )
+
+
 def _confidence_from_verifications(verif_list) -> int:
-    """Simple rule: base 50 + 5 per confirm - 8 per contradict, capped 5-99."""
+    """Simple rule: base 50 + 5 per confirm - 8 per contradict, capped 5-99 (legacy)."""
     confirmations = sum(1 for v in verif_list if v.get("verdict") == "confirm")
     contradictions = sum(1 for v in verif_list if v.get("verdict") == "contradict")
     score = 50 + confirmations * 5 - contradictions * 8
@@ -61,6 +131,7 @@ async def list_incidents(
 ):
     """Return all currently active incidents, optionally filtered by geographic radius or category."""
     _validate_coords(lat, lng)
+    await auto_expire_stale_incidents(db)
 
     query = {"is_active": {"$in": [1, True]}}
     if category:
@@ -95,11 +166,7 @@ async def list_incidents(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = compute_total_confidence(
-            media_score=inc.get("media_score"),
-            verif_list=verif,
-            user=None,
-        )
+        inc["confidence"] = _evaluate_incident_confidence(inc, verif)
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -112,30 +179,225 @@ async def create_incident(
     db = Depends(get_db),
     current_user: dict = Depends(get_current_user_optional),
 ):
-    """Create a new incident report."""
+    """Create a new incident report or consolidate into an existing incident within 100 metres."""
     _validate_coords(payload.lat, payload.lng)
-    incident_id = f"inc-{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Automatically expire stale incidents first so they don't capture new reports as duplicates
+    await auto_expire_stale_incidents(db, now)
 
     reporter_name = "Anonymous"
     reporter_user_id = None
     reporter_email = None
+    reporter_reliability = 3.0
     if current_user:
         reporter_name = current_user.get("name") or current_user.get("full_name") or "Community Member"
         reporter_user_id = str(current_user.get("_id", current_user.get("id", "")))
         reporter_email = current_user.get("email")
-
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if current_user.get("reliability_score") is not None:
+            reporter_reliability = float(current_user["reliability_score"])
 
     # Evaluate media alignment once with Gemini Vision on incident creation
     media_score = None
     ai_assessment = "No media attached"
+    media_authenticity = None
     if payload.media_urls:
-        media_score, ai_assessment = evaluate_media_alignment(payload.description, payload.media_urls)
+        media_score, ai_assessment, media_authenticity = evaluate_media_alignment(
+            payload.description, payload.media_urls, return_details=True
+        )
+
+    # -------------------------------------------------------------
+    # Geographic Duplicate Detection: 100-meter radius, same category
+    # -------------------------------------------------------------
+    deg_delta = 0.002  # ~220m bounding box for fast indexing candidate retrieval
+    geo_query = {
+        "is_active": {"$in": [1, True]},
+        "category": payload.category,
+        "lat": {"$gte": payload.lat - deg_delta, "$lte": payload.lat + deg_delta},
+        "lng": {"$gte": payload.lng - deg_delta, "$lte": payload.lng + deg_delta},
+    }
+    candidates_cursor = db.incidents.find(geo_query)
+    candidates = await candidates_cursor.to_list(length=50)
+
+    matched_incident = None
+    min_dist_meters = float("inf")
+    for cand in candidates:
+        cand_lat = cand.get("lat")
+        cand_lng = cand.get("lng")
+        if cand_lat is None or cand_lng is None:
+            continue
+        try:
+            dist_m = haversine_distance_meters(payload.lat, payload.lng, float(cand_lat), float(cand_lng))
+            if dist_m <= DUPLICATE_DISTANCE_THRESHOLD_METERS and dist_m < min_dist_meters:
+                min_dist_meters = dist_m
+                matched_incident = cand
+        except (ValueError, TypeError):
+            continue
+
+    # =============================================================
+    # CASE A: Duplicate Found -> Consolidate into Existing Incident
+    # =============================================================
+    if matched_incident:
+        new_report = {
+            "report_id": f"rep-{uuid.uuid4().hex[:8]}",
+            "reporter": reporter_name,
+            "user_id": reporter_user_id,
+            "reporter_id": reporter_user_id,
+            "user_email": reporter_email,
+            "reporter_reliability": reporter_reliability,
+            "description": payload.description,
+            "media_urls": payload.media_urls,
+            "media_score": media_score,
+            "ai_assessment": ai_assessment or "Pending",
+            "media_authenticity": media_authenticity,
+            "lat": payload.lat,
+            "lng": payload.lng,
+            "location": payload.location or matched_incident.get("location", "Unknown Location"),
+            "full_location": payload.full_location or matched_incident.get("full_location", "Unknown Location"),
+            "severity": payload.severity or "Medium",
+            "source": payload.source or "Web App",
+            "reported_at": now,
+        }
+
+        existing_reports = list(matched_incident.get("reports") or [])
+        if not existing_reports:
+            prim_time = matched_incident.get("reported_at_full", now)
+            existing_reports.append({
+                "report_id": f"rep-{str(matched_incident.get('id') or matched_incident.get('_id', 'primary'))[-8:]}",
+                "reporter": matched_incident.get("reporter", "Anonymous"),
+                "user_id": matched_incident.get("user_id"),
+                "reporter_id": matched_incident.get("reporter_id"),
+                "user_email": matched_incident.get("user_email"),
+                "reporter_reliability": float(matched_incident.get("reporter_reliability", 3.0)),
+                "description": matched_incident.get("description", ""),
+                "media_urls": matched_incident.get("media_urls", []),
+                "media_score": matched_incident.get("media_score"),
+                "ai_assessment": matched_incident.get("ai_assessment", "Pending"),
+                "lat": matched_incident.get("lat", 0.0),
+                "lng": matched_incident.get("lng", 0.0),
+                "location": matched_incident.get("location", ""),
+                "full_location": matched_incident.get("full_location", ""),
+                "severity": matched_incident.get("severity", "Medium"),
+                "source": matched_incident.get("source", "Web App"),
+                "reported_at": prim_time,
+            })
+
+        existing_reports.append(new_report)
+        total_report_count = len(existing_reports)
+
+        # Merge media URLs
+        combined_media = list(matched_incident.get("media_urls") or [])
+        for m in payload.media_urls:
+            if m not in combined_media:
+                combined_media.append(m)
+
+        # Determine best visual evidence across all reports
+        all_scores = [r.get("media_score") for r in existing_reports if r.get("media_score") is not None]
+        best_media_score = max(all_scores) if all_scores else None
+        all_assessments = [
+            r.get("ai_assessment") for r in existing_reports
+            if r.get("ai_assessment") and r.get("ai_assessment") != "No media attached"
+        ]
+        best_assessment = all_assessments[-1] if all_assessments else (ai_assessment or matched_incident.get("ai_assessment"))
+        all_authenticities = [
+            r.get("media_authenticity") for r in existing_reports
+            if r.get("media_authenticity")
+        ]
+        best_authenticity = all_authenticities[-1] if all_authenticities else (media_authenticity or matched_incident.get("media_authenticity"))
+
+        # Determine highest reported severity
+        severity_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+        all_severities = [r.get("severity", "Medium") for r in existing_reports]
+        highest_severity = max(all_severities, key=lambda s: severity_order.get(s, 2))
+
+        # Average reporter reliability
+        all_reliabilities = [float(r.get("reporter_reliability", 3.0)) for r in existing_reports]
+        avg_rep_rel = round(sum(all_reliabilities) / len(all_reliabilities), 2)
+
+        # Register corroboration confirmation
+        corrob_verif = {
+            "_id": uuid.uuid4().hex,
+            "incident_id": matched_incident["id"],
+            "user_id": reporter_user_id,
+            "verdict": "confirm",
+            "voter_reliability": reporter_reliability,
+            "created_at": now,
+        }
+        await db.verifications.insert_one(corrob_verif)
+
+        verif_cursor = db.verifications.find({"incident_id": matched_incident["id"]})
+        verif = await verif_cursor.to_list(length=500)
+
+        consolidated_conf = compute_total_confidence(
+            description=matched_incident.get("description", payload.description),
+            media_urls=combined_media,
+            verif_list=verif,
+            media_score=best_media_score,
+            report_count=total_report_count,
+            reporter_reliability=avg_rep_rel,
+            category=matched_incident["category"],
+            reported_at=now,
+            current_time=now,
+        )
+
+        update_fields = {
+            "reports": existing_reports,
+            "report_count": total_report_count,
+            "is_consolidated": True,
+            "media_urls": combined_media,
+            "media_count": len(combined_media),
+            "media_score": best_media_score,
+            "ai_assessment": best_assessment,
+            "media_authenticity": best_authenticity,
+            "confidence": consolidated_conf,
+            "severity": highest_severity,
+            "reporter_reliability": avg_rep_rel,
+            "reported_at_full": now,
+            "last_activity_at": now,
+        }
+        if payload.full_location and matched_incident.get("location") in ("Unknown", "Unknown Location", ""):
+            update_fields["location"] = payload.location or payload.full_location.split(",")[0].strip()
+            update_fields["full_location"] = payload.full_location
+
+        await db.incidents.update_one({"id": matched_incident["id"]}, {"$set": update_fields})
+        matched_incident.update(update_fields)
+        return IncidentOut.from_mongo_doc(matched_incident, verif)
+
+    # =============================================================
+    # CASE B: No Duplicate -> Create New Incident
+    # =============================================================
+    incident_id = f"inc-{uuid.uuid4().hex[:8]}"
+
+    initial_report = {
+        "report_id": f"rep-{incident_id[-8:]}",
+        "reporter": reporter_name,
+        "user_id": reporter_user_id,
+        "reporter_id": reporter_user_id,
+        "user_email": reporter_email,
+        "reporter_reliability": reporter_reliability,
+        "description": payload.description,
+        "media_urls": payload.media_urls,
+        "media_score": media_score,
+        "ai_assessment": ai_assessment or "Pending",
+        "media_authenticity": media_authenticity,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "location": payload.location or "Unknown Location",
+        "full_location": payload.full_location or payload.location or "Unknown Location",
+        "severity": payload.severity or "Medium",
+        "source": payload.source or "Web App",
+        "reported_at": now,
+    }
 
     initial_confidence = compute_total_confidence(
+        description=payload.description,
+        media_urls=payload.media_urls,
         media_score=media_score,
         verif_list=[],
-        user=current_user,
+        report_count=1,
+        reporter_reliability=reporter_reliability,
+        category=payload.category,
+        reported_at=now,
     )
 
     inc_doc = {
@@ -150,10 +412,15 @@ async def create_incident(
         "confidence": initial_confidence,
         "media_score": media_score,
         "ai_assessment": ai_assessment or "Pending",
+        "media_authenticity": media_authenticity,
         "description": payload.description,
         "reporter": reporter_name,
         "user_id": reporter_user_id,
         "reporter_id": reporter_user_id,
+        "reporter_reliability": reporter_reliability,
+        "reports": [initial_report],
+        "report_count": 1,
+        "is_consolidated": False,
         "user_email": reporter_email,
         "source": payload.source or "Web App",
         "media_urls": payload.media_urls,
@@ -161,7 +428,9 @@ async def create_incident(
         "map_position_top": "50%",
         "map_position_left": "50%",
         "reported_at_full": now,
+        "last_activity_at": now,
         "is_active": 1,
+        "status": "active",
     }
 
     await db.incidents.insert_one(inc_doc)
@@ -180,6 +449,8 @@ async def get_stats(
     current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Aggregated dashboard stats, optionally filtered by local geographic scope."""
+    await auto_expire_stale_incidents(db)
+
     if (lat is None or lng is None) and radius is not None and current_user:
         last_loc = current_user.get("last_known_location") or {}
         if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
@@ -216,11 +487,7 @@ async def get_stats(
 
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = compute_total_confidence(
-            media_score=inc.get("media_score"),
-            verif_list=verif,
-            user=None,
-        )
+        inc["confidence"] = _evaluate_incident_confidence(inc, verif)
         active_incidents.append(inc)
 
     high_conf = [i for i in active_incidents if i.get("confidence", 50) >= 80]
@@ -259,6 +526,8 @@ async def get_nearby_incidents(
     current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Return active incidents within the specified circular radius (in km) of coordinates or saved user location."""
+    await auto_expire_stale_incidents(db)
+
     if (lat is None or lng is None) and current_user:
         last_loc = current_user.get("last_known_location") or {}
         if last_loc.get("lat") is not None and last_loc.get("lng") is not None:
@@ -305,11 +574,7 @@ async def get_nearby_incidents(
         if dist <= radius:
             verif_cursor = db.verifications.find({"incident_id": inc["id"]})
             verif = await verif_cursor.to_list(length=500)
-            inc["confidence"] = compute_total_confidence(
-                media_score=inc.get("media_score"),
-                verif_list=verif,
-                user=None,
-            )
+            inc["confidence"] = _evaluate_incident_confidence(inc, verif)
             result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return sorted(result, key=lambda x: x.confidence, reverse=True)
@@ -319,6 +584,8 @@ async def get_nearby_incidents(
 @router.get("/notifications/", response_model=List[IncidentOut])
 async def get_notifications(db = Depends(get_db)):
     """Return high-priority active incidents for notifications (confidence >= 70)."""
+    await auto_expire_stale_incidents(db)
+
     active_cursor = db.incidents.find({"is_active": {"$in": [1, True]}})
     incidents = await active_cursor.to_list(length=200)
 
@@ -326,11 +593,7 @@ async def get_notifications(db = Depends(get_db)):
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        conf = compute_total_confidence(
-            media_score=inc.get("media_score"),
-            verif_list=verif,
-            user=None,
-        )
+        conf = _evaluate_incident_confidence(inc, verif)
         if conf >= 70:
             inc["confidence"] = conf
             result.append(IncidentOut.from_mongo_doc(inc, verif))
@@ -346,7 +609,7 @@ async def get_my_incidents(
     db = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """Return all incidents reported by the authenticated user, sorted newest first."""
+    """Return all incidents reported or corroborated by authenticated user, sorted newest first."""
     user_id_str = str(current_user.get("_id", ""))
     user_id_alt = str(current_user.get("id", ""))
     user_name = current_user.get("name", "")
@@ -355,15 +618,34 @@ async def get_my_incidents(
 
     or_conditions = []
     if user_id_str:
-        or_conditions.extend([{"user_id": user_id_str}, {"reporter_id": user_id_str}])
+        or_conditions.extend([
+            {"user_id": user_id_str},
+            {"reporter_id": user_id_str},
+            {"reports.user_id": user_id_str},
+            {"reports.reporter_id": user_id_str},
+        ])
     if user_id_alt and user_id_alt != user_id_str:
-        or_conditions.extend([{"user_id": user_id_alt}, {"reporter_id": user_id_alt}])
+        or_conditions.extend([
+            {"user_id": user_id_alt},
+            {"reporter_id": user_id_alt},
+            {"reports.user_id": user_id_alt},
+            {"reports.reporter_id": user_id_alt},
+        ])
     if user_name:
-        or_conditions.append({"reporter": user_name})
+        or_conditions.extend([
+            {"reporter": user_name},
+            {"reports.reporter": user_name},
+        ])
     if user_fullname and user_fullname != user_name:
-        or_conditions.append({"reporter": user_fullname})
+        or_conditions.extend([
+            {"reporter": user_fullname},
+            {"reports.reporter": user_fullname},
+        ])
     if user_email:
-        or_conditions.append({"user_email": user_email})
+        or_conditions.extend([
+            {"user_email": user_email},
+            {"reports.user_email": user_email},
+        ])
 
     if not or_conditions:
         return []
@@ -375,11 +657,7 @@ async def get_my_incidents(
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = compute_total_confidence(
-            media_score=inc.get("media_score"),
-            verif_list=verif,
-            user=None,
-        )
+        inc["confidence"] = _evaluate_incident_confidence(inc, verif)
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result
@@ -388,10 +666,27 @@ async def get_my_incidents(
 @router.get("/{incident_id}", response_model=IncidentOut)
 @router.get("/{incident_id}/", response_model=IncidentOut)
 async def get_incident(incident_id: str, db = Depends(get_db)):
-    """Return a single incident by ID."""
+    """Return a single incident by ID with lazy expiry check and full report history."""
     inc = await db.incidents.find_one({"id": incident_id})
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
+
+    # Lazy auto-expiry evaluation for this specific incident
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    category = inc.get("category", "Other")
+    expiry_hours = EXPIRY_HOURS_PER_CATEGORY.get(category, 12.0)
+    ref_time = inc.get("last_activity_at") or inc.get("reported_at_full")
+    if inc.get("is_active") in (1, True) and ref_time:
+        if isinstance(ref_time, datetime):
+            if ref_time.tzinfo is not None:
+                ref_time = ref_time.astimezone(timezone.utc).replace(tzinfo=None)
+            if (now - ref_time).total_seconds() / 3600.0 >= expiry_hours:
+                await db.incidents.update_one(
+                    {"id": inc["id"]},
+                    {"$set": {"is_active": 0, "status": "expired", "expired_at": now}}
+                )
+                inc["is_active"] = 0
+                inc["status"] = "expired"
 
     verif_cursor = db.verifications.find({"incident_id": inc["id"]})
     verif = await verif_cursor.to_list(length=500)
@@ -399,19 +694,18 @@ async def get_incident(incident_id: str, db = Depends(get_db)):
     # If media was attached and not yet scored (or pending/unconfigured), evaluate on-demand
     media_score = inc.get("media_score")
     if media_score is None and inc.get("media_urls"):
-        m_score, a_assess = evaluate_media_alignment(inc.get("description", ""), inc.get("media_urls"))
+        m_score, a_assess, m_auth = evaluate_media_alignment(
+            inc.get("description", ""), inc.get("media_urls"), return_details=True
+        )
         if m_score is not None:
             media_score = m_score
             inc["media_score"] = m_score
             inc["ai_assessment"] = a_assess
+            inc["media_authenticity"] = m_auth
             await db.incidents.update_one(
                 {"id": inc["id"]},
-                {"$set": {"media_score": m_score, "ai_assessment": a_assess}}
+                {"$set": {"media_score": m_score, "ai_assessment": a_assess, "media_authenticity": m_auth}}
             )
 
-    inc["confidence"] = compute_total_confidence(
-        media_score=media_score,
-        verif_list=verif,
-        user=None,
-    )
+    inc["confidence"] = _evaluate_incident_confidence(inc, verif)
     return IncidentOut.from_mongo_doc(inc, verif)
