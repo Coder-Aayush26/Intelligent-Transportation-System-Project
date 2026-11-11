@@ -67,7 +67,12 @@ export default function IncidentDetailPage() {
           <IncidentHeader incident={incident} onIncidentUpdate={setIncident} />
         </div>
         <div>
-          <MediaGallery count={incident.mediaCount} mediaUrls={incident.mediaUrls} />
+          <MediaGallery
+            count={incident.mediaCount}
+            mediaUrls={incident.mediaUrls}
+            authenticity={incident.mediaAuthenticity}
+            aiAssessment={incident.aiAssessment}
+          />
           <VerificationSummary incident={incident} onIncidentUpdate={setIncident} />
         </div>
       </div>

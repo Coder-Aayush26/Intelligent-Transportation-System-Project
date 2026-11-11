@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   ThumbsUp, ThumbsDown, CheckCircle2, ShieldCheck, 
-  AlertCircle, MapPin, Lock, Navigation, AlertTriangle 
+  AlertCircle, MapPin, Lock, Navigation
 } from 'lucide-react';
 import { verifyIncident } from '../../api/incidents';
 import { useAppLocation } from '../../context/LocationContext';
@@ -33,6 +33,9 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
+
+  const reportCount = incident.reportCount || incident.reports?.length || 1;
+  const isExpired = incident.isActive === false || incident.status === 'expired';
 
   useEffect(() => {
     if (incident?.id) {
@@ -71,8 +74,8 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
     (Array.isArray(incident.mediaUrls) && incident.mediaUrls.length > 0) ||
     incident.mediaCount > 0
   );
-  const aiScore = incident.aiAuthenticityScore ?? (incident.mediaScore != null ? Math.round(incident.mediaScore * 100) : 0);
-  const isAiApproved = Boolean(incident.aiVerified ?? (hasMedia && aiScore >= AI_MIN_THRESHOLD));
+  const aiScore = incident.aiAuthenticityScore ?? (incident.mediaScore != null ? Math.round(incident.mediaScore * 100) : (incident.mediaAuthenticity?.score != null ? Math.round(incident.mediaAuthenticity.score * 100) : 0));
+  const isAiApproved = Boolean(incident.aiVerified ?? (hasMedia ? aiScore >= AI_MIN_THRESHOLD : true));
 
   // Gate 2: Proximity Gate (within 1000 meters)
   const isWithinProximity = distanceMeters != null && distanceMeters <= PROXIMITY_LIMIT_METERS;
@@ -113,38 +116,31 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
       const updated = { ...incident };
       if (res && res.new_confidence != null) {
         updated.confidence = res.new_confidence;
-        updated.nearbyVerifications = res.confirmations ?? (updated.nearbyVerifications + 1);
-        updated.contradictions = res.contradictions ?? updated.contradictions;
-      } else {
-        if (verdict === 'confirm') {
-          updated.nearbyVerifications = (updated.nearbyVerifications || 0) + 1;
-          updated.confidence = Math.min(99, (updated.confidence || 50) + 5);
-        } else if (verdict === 'contradict') {
-          updated.contradictions = (updated.contradictions || 0) + 1;
-          updated.confidence = Math.max(5, (updated.confidence || 50) - 8);
-        } else if (verdict === 'resolve') {
-          updated.status = 'Resolved';
-          updated.confidence = Math.max(5, (updated.confidence || 50) - 20);
-        }
       }
-
+      if (res && res.confirmations != null) {
+        updated.nearbyVerifications = res.confirmations;
+      }
+      if (res && res.contradictions != null) {
+        updated.contradictions = res.contradictions;
+      }
       if (verdict === 'resolve') {
         updated.status = 'Resolved';
       }
 
-      onIncidentUpdate?.(updated);
-
-      if (verdict === 'confirm') {
-        setFeedback('✓ You confirmed this incident as active within the 1km verification zone.');
-      } else if (verdict === 'contradict') {
-        setFeedback('✓ You reported this hazard as inaccurate or cleared. Feedback recorded.');
-      } else {
-        setFeedback('✓ Hazard reported cleared / resolved.');
+      if (onIncidentUpdate) {
+        onIncidentUpdate(updated);
       }
 
-      setTimeout(() => setFeedback(''), 4500);
+      setFeedback(
+        verdict === 'confirm'
+          ? '✓ Confirmation registered! Confidence reinforced.'
+          : verdict === 'resolve'
+          ? '✓ Incident reported resolved by community response.'
+          : '✓ Contradiction recorded and factored into reliability score.'
+      );
+      setTimeout(() => setFeedback(''), 5000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to submit verification. Please try again.');
+      setError(err.message || 'Failed to submit verification. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -155,7 +151,7 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
   return (
     <div className="detail-card verif-summary-card">
       <div className="verif-card-header">
-        <h4 className="panel-heading">Verification Summary</h4>
+        <h4 className="panel-heading" style={{ margin: 0 }}>Verification Summary</h4>
         <span className="verif-model-badge">
           <ShieldCheck size={14} />
           <span>2-Stage Pipeline</span>
@@ -163,6 +159,11 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
       </div>
 
       <div className="verif-metrics-list">
+        <div className="verif-row">
+          <span className="verif-label">Corroborating Reports</span>
+          <span className="check-ok">✓ {reportCount} Independent Report(s)</span>
+        </div>
+
         <div className="verif-row verif-row-ai">
           <div className="verif-row-top">
             <span className="verif-label">Stage 1: AI Authenticity Screening</span>
@@ -177,20 +178,51 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
             </div>
           )}
         </div>
+
+        {incident.mediaAuthenticity && (
+          <div className="verif-row">
+            <span className="verif-label">AI Visual Consistency</span>
+            <span className={incident.mediaAuthenticity.score >= 0.7 ? 'check-ok' : incident.mediaAuthenticity.score >= 0.35 ? 'check-warn' : 'check-err'}>
+              {incident.mediaAuthenticity.score >= 0.7 ? '✓' : incident.mediaAuthenticity.score >= 0.35 ? '⚠' : '✕'}{' '}
+              {incident.mediaAuthenticity.description_consistency === 'verified_match'
+                ? 'Verified Match'
+                : incident.mediaAuthenticity.description_consistency === 'inconsistent_mismatch'
+                ? 'Inconsistent Mismatch'
+                : incident.mediaAuthenticity.evidence_quality === 'synthetic_or_dummy'
+                ? 'Rejected Dummy'
+                : `${Math.round(incident.mediaAuthenticity.score * 100)}% Authentic`}
+            </span>
+          </div>
+        )}
+
         <div className="verif-row">
           <span className="verif-label">Stage 2: Community Confirmations</span>
           <span className="check-ok">✓ {incident.nearbyVerifications || 0} Confirmed (≤1km)</span>
         </div>
+
         <div className="verif-row">
           <span className="verif-label">Contradictions / Discrepancies</span>
           <span className={incident.contradictions === 0 ? 'check-ok' : 'check-warn'}>
             {incident.contradictions === 0 ? '✓ 0' : `⚠ ${incident.contradictions}`}
           </span>
         </div>
+
+        <div className="verif-row">
+          <span className="verif-label">Contributing User Reliability (Avg.)</span>
+          <b className="verif-val">{incident.avgReliability || 4.2} / 5.0</b>
+        </div>
+
         <div className="verif-row">
           <span className="verif-label">Voter Proximity Threshold</span>
           <b className="verif-val">≤ 1,000 metres</b>
         </div>
+
+        {isExpired && (
+          <div className="verif-row">
+            <span className="verif-label">Lifecycle Status</span>
+            <span className="check-warn">⏱️ Expired / Auto-Resolved</span>
+          </div>
+        )}
       </div>
 
       {/* ── Community Verification Section with 2-Stage Gating ── */}

@@ -1,5 +1,5 @@
 """Verifications router — community confirmation/contradiction/resolution of incidents."""
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,18 +8,10 @@ from ..database import get_db
 from ..schemas import VerificationCreate, VerificationOut
 from ..auth import get_current_user_optional
 from ..realtime import realtime_manager
-from .incidents import haversine_km
+from ..services.confidence import compute_total_confidence
+from .incidents import haversine_distance_meters
 
 router = APIRouter(tags=["verifications"])
-
-
-def _calculate_confidence(verif_list) -> int:
-    """Calculate confidence based on community confirmations and contradictions."""
-    confirmations = sum(1 for v in verif_list if v.get("verdict") == "confirm")
-    contradictions = sum(1 for v in verif_list if v.get("verdict") == "contradict")
-    resolutions = sum(1 for v in verif_list if v.get("verdict") == "resolve")
-    score = 50 + (confirmations * 5) - (contradictions * 8) - (resolutions * 20)
-    return max(5, min(99, score))
 
 
 @router.post("/incidents/{incident_id}/verify", response_model=VerificationOut, status_code=201)
@@ -40,11 +32,11 @@ async def verify_incident(
 
     # ── Gate 1: Stage-1 AI Verification Threshold (Minimum 70% Authenticity) ──
     ai_score = inc.get("ai_authenticity_score")
-    if ai_score is None:
-        media_score = inc.get("media_score")
-        ai_score = int(media_score * 100) if media_score is not None else 0
+    if ai_score is None and inc.get("media_score") is not None:
+        ai_score = int(inc["media_score"] * 100)
 
-    if ai_score < 70:
+    # If media was attached and scored below 70%, voting is locked
+    if inc.get("media_urls") and ai_score is not None and ai_score < 70:
         raise HTTPException(
             status_code=403,
             detail=f"Community voting is locked: This incident has not passed Stage-1 AI verification (Authenticity Score: {ai_score}% < 70% required threshold).",
@@ -63,18 +55,28 @@ async def verify_incident(
 
     if voter_lat is not None and voter_lng is not None and inc_lat is not None and inc_lng is not None:
         try:
-            dist_km = haversine_km(float(voter_lat), float(voter_lng), float(inc_lat), float(inc_lng))
-            dist_meters = dist_km * 1000.0
+            dist_meters = haversine_distance_meters(float(voter_lat), float(voter_lng), float(inc_lat), float(inc_lng))
             if dist_meters > 1000.0:
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Proximity restriction: You are {dist_meters:.0f} meters away ({dist_km:.2f} km). Community verification is strictly limited to road users within 1,000 meters (1.0 km) of the incident.",
+                    detail=f"Proximity restriction: You are {dist_meters:.0f} meters away ({(dist_meters / 1000.0):.2f} km). Community verification is strictly limited to road users within 1,000 meters (1.0 km) of the incident.",
                 )
         except (ValueError, TypeError):
             pass
 
-    user_id = str(current_user.get("_id", current_user.get("id", ""))) if current_user else payload.user_id
+    user_id = str(current_user.get("_id", current_user.get("id", ""))) if current_user else (str(payload.user_id) if payload.user_id else None)
     user_name = current_user.get("name") if current_user else None
+
+    # Determine voter reliability
+    voter_reliability = 3.0
+    if current_user and current_user.get("reliability_score") is not None:
+        voter_reliability = float(current_user["reliability_score"])
+    elif payload.user_id:
+        user_doc = await db.users.find_one({"$or": [{"id": payload.user_id}, {"_id": payload.user_id}]})
+        if user_doc and user_doc.get("reliability_score") is not None:
+            voter_reliability = float(user_doc["reliability_score"])
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Check if user already submitted a verification for this incident
     existing_verif = None
@@ -85,43 +87,66 @@ async def verify_incident(
         doc_id = existing_verif["_id"]
         await db.verifications.update_one(
             {"_id": doc_id},
-            {"$set": {"verdict": payload.verdict, "updated_at": datetime.utcnow()}}
+            {"$set": {
+                "verdict": payload.verdict,
+                "voter_reliability": voter_reliability,
+                "updated_at": now,
+            }}
         )
     else:
         doc_id = uuid.uuid4().hex
         v_doc = {
             "_id": doc_id,
             "incident_id": incident_id,
-            "user_id": str(user_id) if user_id else None,
+            "user_id": user_id,
             "user_name": user_name,
             "verdict": payload.verdict,
-            "created_at": datetime.utcnow(),
+            "voter_reliability": voter_reliability,
+            "created_at": now,
         }
         await db.verifications.insert_one(v_doc)
 
-    # Re-calculate confidence and verification stats
+    # Re-calculate confidence with full 6-factor model incorporating voter reliability
     verif_cursor = db.verifications.find({"incident_id": incident_id})
     all_verifs = await verif_cursor.to_list(length=500)
-    new_conf = _calculate_confidence(all_verifs)
     confirmations = sum(1 for v in all_verifs if v.get("verdict") == "confirm")
     contradictions = sum(1 for v in all_verifs if v.get("verdict") == "contradict")
 
-    incident_updates = {"confidence": new_conf}
+    new_conf = compute_total_confidence(
+        description=inc.get("description", ""),
+        media_urls=inc.get("media_urls", []),
+        media_score=inc.get("media_score"),
+        verif_list=all_verifs,
+        report_count=inc.get("report_count", 1),
+        reporter_reliability=float(inc.get("reporter_reliability", 3.0)),
+        category=inc.get("category", "Other"),
+        reported_at=inc.get("reported_at_full"),
+        current_time=now,
+    )
+
+    incident_updates = {
+        "confidence": new_conf,
+        "last_activity_at": now,
+    }
     if payload.verdict == "resolve":
         incident_updates["status"] = "Resolved"
+        incident_updates["is_active"] = 0
 
     await db.incidents.update_one(
         {"id": incident_id},
         {"$set": incident_updates}
     )
 
-    await realtime_manager.broadcast("incident_verified", {
-        "incident_id": incident_id,
-        "confidence": new_conf,
-        "verifications": len(all_verifs),
-        "nearbyVerifications": confirmations,
-        "contradictions": contradictions,
-    })
+    try:
+        await realtime_manager.broadcast("incident_verified", {
+            "incident_id": incident_id,
+            "confidence": new_conf,
+            "verifications": len(all_verifs),
+            "nearbyVerifications": confirmations,
+            "contradictions": contradictions,
+        })
+    except Exception:
+        pass
 
     return VerificationOut(
         id=str(doc_id),

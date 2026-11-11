@@ -106,6 +106,13 @@
   font-size: 13px;
 }
 
+.check-err {
+  color: #f87171;
+  font-weight: 600;
+  font-size: 13px;
+  filter: drop-shadow(0 0 6px rgba(248,113,113,0.4));
+}
+
 /* ── Interactive Community Action Section ────────────────────── */
 .community-action-section {
   background: var(--bg, #f8fafc);

@@ -6,10 +6,31 @@ the existing mockData.js field names — no frontend changes needed.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------- Incident ----------
+
+class IncidentReportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    reportId: str
+    reporter: str
+    reporterReliability: float = 3.0
+    description: str = ""
+    severity: str = "Medium"
+    location: str = ""
+    fullLocation: str = ""
+    coords: dict = {}
+    reportedAt: str = ""
+    reportedTimeFull: str = ""
+    mediaUrls: List[str] = []
+    mediaCount: int = 0
+    source: str = "Web App"
+    aiAssessment: Optional[str] = None
+    mediaAuthenticity: Optional[Dict[str, Any]] = None
+
 
 class IncidentCreate(BaseModel):
     category: str
@@ -46,6 +67,7 @@ class IncidentOut(BaseModel):
     aiAuthenticityScore: int = 0
     aiVerified: bool = False
     stage: str = "Stage 1: AI Screening"
+    mediaAuthenticity: Optional[Dict[str, Any]] = None
     nearbyVerifications: int = 0
     contradictions: int = 0
     avgReliability: float = 0.0
@@ -57,6 +79,9 @@ class IncidentOut(BaseModel):
     resolvedBy: Optional[str] = None
     assignedUnit: Optional[str] = None
     isActive: bool = True
+    reportCount: int = 1
+    isConsolidated: bool = False
+    reports: List[IncidentReportOut] = []
 
     @classmethod
     def from_mongo_doc(cls, inc: dict, verif_list: list[dict]):
@@ -74,17 +99,79 @@ class IncidentOut(BaseModel):
         if not status_val:
             status_val = "Active" if is_active_val else "Resolved"
 
-        # Retrieve AI assessment details directly from Gemini Vision evaluation
-        ai_score = inc.get("ai_authenticity_score")
-        if ai_score is None:
-            if inc.get("media_score") is not None:
-                ai_score = int(inc["media_score"] * 100)
-            else:
-                ai_score = 0
+        # Corroborating reports subdocuments
+        raw_reports = inc.get("reports")
+        reports_out = []
+        if raw_reports:
+            for r in raw_reports:
+                r_time = r.get("reported_at")
+                reports_out.append(IncidentReportOut(
+                    reportId=r.get("report_id") or f"rep-{uuid.uuid4().hex[:8]}",
+                    reporter=r.get("reporter", "Anonymous"),
+                    reporterReliability=float(r.get("reporter_reliability", 3.0)),
+                    description=r.get("description", ""),
+                    severity=r.get("severity", "Medium"),
+                    location=r.get("location", ""),
+                    fullLocation=r.get("full_location", ""),
+                    coords={"lat": r.get("lat", 0.0), "lng": r.get("lng", 0.0)},
+                    reportedAt=_relative_time(r_time),
+                    reportedTimeFull=_format_dt(r_time),
+                    mediaUrls=r.get("media_urls", []),
+                    mediaCount=len(r.get("media_urls", [])),
+                    source=r.get("source", "Web App"),
+                    aiAssessment=r.get("ai_assessment"),
+                    mediaAuthenticity=r.get("media_authenticity"),
+                ))
+        else:
+            reports_out.append(IncidentReportOut(
+                reportId=f"rep-{str(inc.get('id') or inc.get('_id', 'primary'))[-8:]}",
+                reporter=inc.get("reporter", "Anonymous"),
+                reporterReliability=float(inc.get("reporter_reliability", 3.0)),
+                description=inc.get("description", ""),
+                severity=inc.get("severity", "Medium"),
+                location=inc.get("location", ""),
+                fullLocation=inc.get("full_location", ""),
+                coords={"lat": inc.get("lat", 0.0), "lng": inc.get("lng", 0.0)},
+                reportedAt=_relative_time(reported_at_full),
+                reportedTimeFull=_format_dt(reported_at_full),
+                mediaUrls=media_list,
+                mediaCount=len(media_list) or inc.get("media_count", 0),
+                source=inc.get("source", "Web App"),
+                aiAssessment=inc.get("ai_assessment"),
+                mediaAuthenticity=inc.get("media_authenticity"),
+            ))
 
-        ai_assessment = inc.get("ai_assessment") or "Pending AI Evaluation"
+        report_count = inc.get("report_count") or len(reports_out)
+        is_consolidated = inc.get("is_consolidated", report_count > 1)
+
+        # Retrieve AI assessment details directly from Gemini Vision or mediaAuthenticity
+        media_authenticity = inc.get("media_authenticity")
+        ai_score = inc.get("ai_authenticity_score")
+        if ai_score is None and media_authenticity and media_authenticity.get("score") is not None:
+            ai_score = int(media_authenticity["score"] * 100)
+        elif ai_score is None and inc.get("media_score") is not None:
+            ai_score = int(inc["media_score"] * 100)
+        elif ai_score is None:
+            ai_score = 0
+
+        ai_assessment = inc.get("ai_assessment") or (media_authenticity.get("assessment") if media_authenticity else None) or "Pending AI Evaluation"
         ai_verified = bool(inc.get("ai_verified", ai_score >= 70 and has_media))
         stage = inc.get("stage") or ("Stage 2: Community Verification Open" if ai_verified else "Stage 1: AI Screening Pending")
+
+        reliabilities = []
+        if raw_reports:
+            for r in raw_reports:
+                if r.get("reporter_reliability") is not None:
+                    reliabilities.append(float(r["reporter_reliability"]))
+        elif inc.get("reporter_reliability") is not None:
+            reliabilities.append(float(inc["reporter_reliability"]))
+
+        for v in (verif_list or []):
+            if v.get("voter_reliability") is not None:
+                reliabilities.append(float(v["voter_reliability"]))
+            elif v.get("reliability_score") is not None:
+                reliabilities.append(float(v["reliability_score"]))
+        avg_rel = round(sum(reliabilities) / len(reliabilities), 1) if reliabilities else 4.0
 
         return cls(
             id=inc.get("id") or str(inc.get("_id", "")),
@@ -106,9 +193,10 @@ class IncidentOut(BaseModel):
             aiAuthenticityScore=ai_score,
             aiVerified=ai_verified,
             stage=stage,
+            mediaAuthenticity=media_authenticity,
             nearbyVerifications=confirmations,
             contradictions=contradictions,
-            avgReliability=4.0,
+            avgReliability=avg_rel,
             mapPosition={"top": inc.get("map_position_top", "50%"), "left": inc.get("map_position_left", "50%")},
             status=status_val,
             resolutionNotes=inc.get("resolution_notes"),
@@ -117,6 +205,9 @@ class IncidentOut(BaseModel):
             resolvedBy=inc.get("resolved_by"),
             assignedUnit=inc.get("assigned_unit"),
             isActive=is_active_val,
+            reportCount=report_count,
+            isConsolidated=is_consolidated,
+            reports=reports_out,
         )
 
 

@@ -26,6 +26,8 @@ export default function ReportForm({ onLocationAcquired }) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [submissionResult, setSubmissionResult] = useState(null);
+  const [nearbyDuplicateNotice, setNearbyDuplicateNotice] = useState(null);
 
   // Initialise default preview on mount without blocking on GPS
   useEffect(() => {
@@ -36,6 +38,36 @@ export default function ReportForm({ onLocationAcquired }) {
       timestamp: new Date().toLocaleString(),
     });
   }, []);
+
+  // Check for nearby active incidents of the same category within ~100m
+  useEffect(() => {
+    let isCurrent = true;
+    async function checkNearbyDuplicates() {
+      if (!category || locLat == null || locLng == null) {
+        setNearbyDuplicateNotice(null);
+        return;
+      }
+      try {
+        const incidents = await apiFetch(
+          `/incidents/nearby?lat=${locLat}&lng=${locLng}&radius=0.15&category=${encodeURIComponent(category)}`
+        );
+        if (isCurrent) {
+          if (Array.isArray(incidents) && incidents.length > 0) {
+            setNearbyDuplicateNotice(incidents[0]);
+          } else {
+            setNearbyDuplicateNotice(null);
+          }
+        }
+      } catch {
+        if (isCurrent) setNearbyDuplicateNotice(null);
+      }
+    }
+    const timer = setTimeout(checkNearbyDuplicates, 350);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [category, locLat, locLng]);
 
   const handleGetLocation = () => {
     setIsLocating(true);
@@ -169,7 +201,7 @@ export default function ReportForm({ onLocationAcquired }) {
         }
       }
 
-      await apiFetch('/incidents', {
+      const createdData = await apiFetch('/incidents', {
         method: 'POST',
         body: JSON.stringify({ 
           category, 
@@ -182,6 +214,7 @@ export default function ReportForm({ onLocationAcquired }) {
           media_urls: uploadedUrls 
         }),
       });
+      setSubmissionResult(createdData);
     } catch (submissionError) {
       setError(submissionError instanceof Error
         ? submissionError.message
@@ -192,14 +225,28 @@ export default function ReportForm({ onLocationAcquired }) {
 
     setSuccess(true);
     setSubmitting(false);
-    setTimeout(() => navigate('/app/dashboard'), 1500);
+    setTimeout(() => navigate('/app/dashboard'), 2000);
   }
 
   if (success) {
+    const isCorroborated = submissionResult?.isConsolidated || (submissionResult?.reportCount > 1);
     return (
       <div className="form-card">
-        <div className="success-banner">
-          ✅ Report submitted — entering automated assessment, then community verification.
+        <div
+          className="success-banner"
+          style={isCorroborated ? { background: '#eff6ff', color: '#1e40af', borderColor: '#bfdbfe' } : undefined}
+        >
+          {isCorroborated ? (
+            <>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>📍 Report Corroborated & Consolidated!</div>
+              <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4 }}>
+                An active <b>{submissionResult?.category}</b> incident was already active within 100 metres at <b>{submissionResult?.location}</b>.
+                Your report has been associated as <b>Corroboration #{submissionResult?.reportCount}</b>, strengthening its confidence score.
+              </div>
+            </>
+          ) : (
+            '✅ Report submitted — entering automated assessment, then community verification.'
+          )}
         </div>
         <p className="detail-desc" style={{ textAlign: 'center', marginBottom: 0 }}>
           Redirecting you to the live map…
@@ -213,6 +260,19 @@ export default function ReportForm({ onLocationAcquired }) {
       {error && (
         <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 14 }}>
           ⚠ {error}
+        </div>
+      )}
+
+      {nearbyDuplicateNotice && (
+        <div className="duplicate-alert-banner">
+          <div className="duplicate-alert-title">
+            <span>ℹ️ Active {nearbyDuplicateNotice.category} Detected Within 100m</span>
+            <span className="duplicate-tag">{nearbyDuplicateNotice.reportCount || 1} report(s)</span>
+          </div>
+          <div className="duplicate-alert-body">
+            An active incident is already reported at <b>{nearbyDuplicateNotice.location}</b>.
+            Submitting your report here will automatically corroborate and reinforce this existing incident.
+          </div>
         </div>
       )}
 

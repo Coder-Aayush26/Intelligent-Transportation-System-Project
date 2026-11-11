@@ -19,7 +19,14 @@ export default function IncidentCard({ incident }) {
         <div className="inc-title">{incident.category}</div>
       </div>
       <div className="loc">{incident.location}</div>
-      <div className="meta">{incident.reportedAt} &nbsp;•&nbsp; {incident.severity}</div>
+      <div className="meta">
+        {incident.reportedAt} &nbsp;•&nbsp; {incident.severity}
+        {(incident.reportCount > 1 || incident.isConsolidated) && (
+          <span style={{ marginLeft: 6, background: '#eff6ff', color: '#2563eb', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
+            👥 {incident.reportCount} reports
+          </span>
+        )}
+      </div>
       <ConfidenceBar confidence={incident.confidence} indent />
     </button>
   );

@@ -60,9 +60,24 @@ def test_confidence_computation():
     print(f"[PASS] Confidence computation verified: {conf}%")
 
 
+import base64
+import io
+from PIL import Image
+
+def _make_test_photo_b64():
+    img = Image.new("RGB", (100, 100))
+    pix = img.load()
+    for x in range(100):
+        for y in range(100):
+            pix[x, y] = ((x * 5) % 256, (y * 7) % 256, (x * 3 + y * 2) % 256)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+
 def test_media_heuristic():
     """Verify media heuristic fallback when Gemini API is offline."""
-    score, assessment = evaluate_media_alignment("Heavy accident with crushed bumper and wreckage", ["data:image/jpeg;base64,1234567890" * 15])
+    score, assessment = evaluate_media_alignment("Heavy accident with crushed bumper and wreckage", [_make_test_photo_b64()])
     assert score is not None
     assert score >= 0.70
     assert "accident" in assessment.lower() or "vehicle" in assessment.lower()

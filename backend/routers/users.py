@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..database import get_db
 from ..auth import get_current_user
 from ..schemas import UserOut, UserProfileUpdate, UserSettingsUpdate, UserLocationUpdate, IncidentOut, _relative_time
+from ..services.confidence import compute_total_confidence
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -375,7 +376,16 @@ async def get_my_reports(
     for inc in incidents:
         verif_cursor = db.verifications.find({"incident_id": inc["id"]})
         verif = await verif_cursor.to_list(length=500)
-        inc["confidence"] = _calc_conf(verif)
+        inc["confidence"] = compute_total_confidence(
+            description=inc.get("description", ""),
+            media_urls=inc.get("media_urls"),
+            verif_list=verif,
+            media_score=inc.get("media_score"),
+            report_count=inc.get("report_count", 1),
+            reporter_reliability=inc.get("reporter_reliability"),
+            category=inc.get("category", "Other"),
+            reported_at=inc.get("last_activity_at") or inc.get("reported_at_full"),
+        )
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
     return result

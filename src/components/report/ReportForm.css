@@ -52,3 +52,38 @@
 
 .form-actions { display: flex; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
 .note-card { background: var(--blue-light); border-color: rgba(37,99,235,0.2); }
+
+/* ── Duplicate Alert Banner ───────────────────────────────────── */
+.duplicate-alert-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid var(--neon);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+
+.duplicate-alert-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 13px;
+  color: #1e40af;
+  margin-bottom: 5px;
+}
+
+.duplicate-tag {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.duplicate-alert-body {
+  color: #1e3a8a;
+  line-height: 1.45;
+  font-size: 12px;
+}
