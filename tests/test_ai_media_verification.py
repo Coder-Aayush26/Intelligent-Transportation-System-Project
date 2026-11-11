@@ -247,7 +247,7 @@ def test_client():
 
 
 def test_api_incident_with_dummy_media(test_client):
-    """Submitting an incident with a dummy monochromatic image stores media authenticity."""
+    """Submitting an incident with a dummy monochromatic image is rejected by Stage-1 AI screening."""
     client, mock_db = test_client
     dummy_b64 = _make_solid_color_b64(100, 100, color="green")
 
@@ -262,20 +262,8 @@ def test_api_incident_with_dummy_media(test_client):
     }
 
     res = client.post("/incidents", json=payload)
-    assert res.status_code == 201, res.text
-    data = res.json()
-
-    assert data["mediaCount"] == 1
-    assert data["confidence"] == 30  # M=0.0 penalty
-    assert data["mediaAuthenticity"] is not None
-    assert data["mediaAuthenticity"]["evidence_quality"] == "synthetic_or_dummy"
-    assert data["mediaAuthenticity"]["description_consistency"] == "irrelevant_or_fabricated"
-    assert data["mediaAuthenticity"]["score"] == 0.0
-
-    # Also verify that GET /incidents/{id} returns the mediaAuthenticity
-    inc_id = data["id"]
-    get_res = client.get(f"/incidents/{inc_id}")
-    assert get_res.status_code == 200
-    get_data = get_res.json()
-    assert get_data["mediaAuthenticity"]["score"] == 0.0
-    assert get_data["mediaAuthenticity"]["evidence_quality"] == "synthetic_or_dummy"
+    assert res.status_code == 422, res.text
+    detail = res.json()["detail"]
+    assert "Report rejected by Stage-1 AI Verification" in detail
+    assert "Authenticity score is 0%" in detail
+    assert "requires ≥70%" in detail

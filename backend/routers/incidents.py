@@ -209,14 +209,28 @@ async def create_incident(
         if current_user.get("reliability_score") is not None:
             reporter_reliability = float(current_user["reliability_score"])
 
-    # Evaluate media alignment with Gemini Vision on incident creation
+    # Evaluate media alignment with Gemini Vision / Local Heuristic on incident creation
     media_score = None
     ai_assessment = "No media attached"
     media_authenticity = None
     if payload.media_urls:
         media_score, ai_assessment, media_authenticity = evaluate_media_alignment(
-            payload.description, payload.media_urls, return_details=True
+            payload.description,
+            payload.media_urls,
+            return_details=True,
+            category=payload.category,
         )
+        if media_score is not None:
+            check_score = max(0, min(100, int(media_score * 100)))
+        else:
+            check_score = 0
+
+        # Strict Gate: If AI authenticity score is below 70%, reject immediately and do NOT store in DB
+        if check_score < 70:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Report rejected by Stage-1 AI Verification: Authenticity score is {check_score}% (requires ≥70%). AI Assessment: {ai_assessment}. Reports failing the authenticity threshold are discarded immediately to keep the database clean.",
+            )
 
     # -------------------------------------------------------------
     # Geographic Duplicate Detection: 100-meter radius, same category
