@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { 
-  AlertTriangle, 
-  ThumbsUp, 
-  ThumbsDown, 
-  HelpCircle, 
-  X, 
-  MapPin, 
-  Clock, 
-  Sparkles, 
-  Eye, 
-  EyeOff, 
-  Navigation, 
-  CheckCircle2, 
-  Loader2 
+import {
+  AlertTriangle,
+  ThumbsUp,
+  ThumbsDown,
+  HelpCircle,
+  X,
+  MapPin,
+  Clock,
+  Sparkles,
+  Eye,
+  EyeOff,
+  Navigation,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import { useAppLocation } from '../../context/LocationContext';
 import { useAuth } from '../../context/AuthContext';
