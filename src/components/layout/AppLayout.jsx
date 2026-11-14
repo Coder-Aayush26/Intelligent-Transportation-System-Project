@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import RealtimeToast from './RealtimeToast';
 import LocationPromptModal from '../common/LocationPromptModal';
+import EmergencyVerificationCard from '../incident/EmergencyVerificationCard';
 import { useAppLocation } from '../../context/LocationContext';
 import './AppLayout.css';
 
@@ -30,6 +31,7 @@ export default function AppLayout() {
     <div className="app-shell">
       <Sidebar />
       <RealtimeToast />
+      <EmergencyVerificationCard />
       <LocationPromptModal 
         isOpen={isLocationPromptOpen} 
         onClose={closeLocationPrompt} 
