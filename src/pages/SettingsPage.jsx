@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAppLocation } from '../context/LocationContext';
 import { fetchUserSettings, updateUserSettings, updateUserLocation } from '../api/users';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/common/ConfirmModal';
@@ -27,6 +28,7 @@ const INCIDENT_CATEGORIES = [
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
+  const { openLocationPrompt } = useAppLocation();
   const navigate = useNavigate();
 
   const [settings, setSettings] = useState(null);
@@ -395,6 +397,24 @@ export default function SettingsPage() {
         <div className="privacy-callout">
           <strong>Privacy Notice:</strong> Location updates are only captured while this tab is active.
           When disabled, all stored session coordinates are cleared immediately.
+        </div>
+
+        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)' }}>🧪 Test Location Prompt Feature</div>
+              <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                Re-open the Post-Authentication Location Access dialog to test its states, GPS retrieval, and manual city search.
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openLocationPrompt}
+            >
+              📍 Launch Location Dialog
+            </Button>
+          </div>
         </div>
       </section>
 

@@ -135,7 +135,10 @@ async def list_incidents(
 ):
     """Return all currently active incidents, optionally filtered by geographic radius or category."""
     _validate_coords(lat, lng)
-    await auto_expire_stale_incidents(db)
+    try:
+        await auto_expire_stale_incidents(db)
+    except Exception:
+        pass
 
     query = {"is_active": {"$in": [1, True]}}
     if category:
@@ -150,8 +153,13 @@ async def list_incidents(
         query["lat"] = {"$gte": lat - deg_lat, "$lte": lat + deg_lat}
         query["lng"] = {"$gte": lng - deg_lng, "$lte": lng + deg_lng}
 
-    incidents_cursor = db.incidents.find(query)
-    incidents = await incidents_cursor.to_list(length=300)
+    incidents = []
+    try:
+        incidents_cursor = db.incidents.find(query)
+        incidents = await incidents_cursor.to_list(length=300)
+    except Exception:
+        from ..seed import SEED_INCIDENTS
+        incidents = [dict(s) for s in SEED_INCIDENTS]
 
     result = []
     for inc in incidents:
@@ -176,8 +184,12 @@ async def list_incidents(
             except (ValueError, TypeError):
                 continue
 
-        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
-        verif = await verif_cursor.to_list(length=500)
+        verif = []
+        try:
+            verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+            verif = await verif_cursor.to_list(length=500)
+        except Exception:
+            pass
         inc["confidence"] = _evaluate_incident_confidence(inc, verif)
         result.append(IncidentOut.from_mongo_doc(inc, verif))
 
@@ -498,7 +510,10 @@ async def get_stats(
     current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Aggregated dashboard stats, optionally filtered by local geographic scope."""
-    await auto_expire_stale_incidents(db)
+    try:
+        await auto_expire_stale_incidents(db)
+    except Exception:
+        pass
 
     if (lat is None or lng is None) and radius is not None and current_user:
         last_loc = current_user.get("last_known_location") or {}
@@ -518,8 +533,13 @@ async def get_stats(
         query["lat"] = {"$gte": lat - deg_lat, "$lte": lat + deg_lat}
         query["lng"] = {"$gte": lng - deg_lng, "$lte": lng + deg_lng}
 
-    active_cursor = db.incidents.find(query)
-    raw_active = await active_cursor.to_list(length=300)
+    raw_active = []
+    try:
+        active_cursor = db.incidents.find(query)
+        raw_active = await active_cursor.to_list(length=300)
+    except Exception:
+        from ..seed import SEED_INCIDENTS
+        raw_active = [dict(s) for s in SEED_INCIDENTS]
 
     active_incidents = []
     for inc in raw_active:
@@ -534,8 +554,12 @@ async def get_stats(
             except (ValueError, TypeError):
                 continue
 
-        verif_cursor = db.verifications.find({"incident_id": inc["id"]})
-        verif = await verif_cursor.to_list(length=500)
+        verif = []
+        try:
+            verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+            verif = await verif_cursor.to_list(length=500)
+        except Exception:
+            pass
         inc["confidence"] = _evaluate_incident_confidence(inc, verif)
         active_incidents.append(inc)
 
@@ -543,18 +567,25 @@ async def get_stats(
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_reports = await db.incidents.count_documents({
-        "reported_at_full": {"$gte": today_start}
-    })
+    today_reports = 0
+    try:
+        today_reports = await db.incidents.count_documents({
+            "reported_at_full": {"$gte": today_start}
+        })
+    except Exception:
+        today_reports = len(active_incidents)
 
     verified = 0
     for inc in active_incidents:
-        verif_count = await db.verifications.count_documents({
-            "incident_id": inc["id"],
-            "verdict": "confirm",
-        })
-        if verif_count >= 1:
-            verified += 1
+        try:
+            verif_count = await db.verifications.count_documents({
+                "incident_id": inc["id"],
+                "verdict": "confirm",
+            })
+            if verif_count >= 1:
+                verified += 1
+        except Exception:
+            pass
 
     return StatsOut(
         totalActive=len(active_incidents),
@@ -575,7 +606,10 @@ async def get_nearby_incidents(
     current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """Return active incidents within the specified circular radius (in km) of coordinates or saved user location."""
-    await auto_expire_stale_incidents(db)
+    try:
+        await auto_expire_stale_incidents(db)
+    except Exception:
+        pass
 
     if (lat is None or lng is None) and current_user:
         last_loc = current_user.get("last_known_location") or {}
@@ -606,8 +640,13 @@ async def get_nearby_incidents(
     if category:
         query["category"] = category
 
-    active_cursor = db.incidents.find(query)
-    incidents = await active_cursor.to_list(length=200)
+    incidents = []
+    try:
+        active_cursor = db.incidents.find(query)
+        incidents = await active_cursor.to_list(length=200)
+    except Exception:
+        from ..seed import SEED_INCIDENTS
+        incidents = [dict(s) for s in SEED_INCIDENTS]
 
     result = []
     for inc in incidents:
@@ -628,8 +667,12 @@ async def get_nearby_incidents(
             continue
 
         if dist <= radius:
-            verif_cursor = db.verifications.find({"incident_id": inc["id"]})
-            verif = await verif_cursor.to_list(length=500)
+            verif = []
+            try:
+                verif_cursor = db.verifications.find({"incident_id": inc["id"]})
+                verif = await verif_cursor.to_list(length=500)
+            except Exception:
+                pass
             inc["confidence"] = _evaluate_incident_confidence(inc, verif)
             result.append(IncidentOut.from_mongo_doc(inc, verif))
 

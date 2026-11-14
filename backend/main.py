@@ -22,8 +22,27 @@ from .realtime import realtime_manager
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Startup: connect to MongoDB. Shutdown: close connection."""
-    database.client = AsyncIOMotorClient(MONGO_URI)
+    """Startup: connect to MongoDB, or gracefully fall back to in-memory mongomock if MongoDB is offline."""
+    real_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=1000)
+    try:
+        await real_client.admin.command('ping')
+        database.client = real_client
+        print(f"[MongoDB] Connected successfully to live MongoDB at {MONGO_URI}")
+    except Exception as e:
+        print(f"[MongoDB] Local MongoDB at {MONGO_URI} is offline ({type(e).__name__}). Switching to AsyncMongoMockClient in-memory engine.")
+        try:
+            from mongomock_motor import AsyncMongoMockClient
+            database.client = AsyncMongoMockClient()
+        except ImportError:
+            database.client = real_client
+
+    try:
+        from .seed import seed_db
+        db = database.get_db()
+        await seed_db(db)
+    except Exception as e:
+        print(f"[Startup] Error seeding database: {e}")
+
     try:
         db = database.get_db()
         cursor = db.users.find({
@@ -40,10 +59,15 @@ async def lifespan(application: FastAPI):
                     {"_id": u["_id"]},
                     {"$set": {"latitude": float(lat), "longitude": float(lng)}}
                 )
-    except Exception as e:
+    except Exception:
         pass
+
     yield  # application runs here
-    database.client.close()
+    if database.client is not None:
+        try:
+            database.client.close()
+        except Exception:
+            pass
 
 
 app = FastAPI(

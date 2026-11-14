@@ -87,3 +87,98 @@
   line-height: 1.45;
   font-size: 12px;
 }
+
+/* ── Auto-Captured Session Location Card ───────────────────────── */
+.location-session-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(37, 99, 235, 0.04));
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.location-session-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.location-session-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+
+.location-session-note {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.location-session-main {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+  margin-bottom: 12px;
+}
+
+.location-session-name {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.location-session-coords {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 4px;
+}
+
+.location-session-landmark {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.landmark-label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--text-soft) !important;
+  text-transform: none !important;
+  margin-bottom: 2px !important;
+}
+
+.optional-tag {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.landmark-input {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.landmark-input:focus {
+  border-color: var(--neon);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}

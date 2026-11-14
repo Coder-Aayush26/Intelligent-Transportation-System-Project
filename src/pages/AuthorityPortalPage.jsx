@@ -9,7 +9,9 @@ import { fetchAuthorityIncidents, updateIncidentResolution } from '../api/incide
 import { verifyAuthorityAccess, loginAuthorityApi } from '../api/users';
 import { useRealtime } from '../context/RealtimeContext';
 import { useAuth } from '../context/AuthContext';
+import { useAppLocation } from '../context/LocationContext';
 import ConfirmModal from '../components/common/ConfirmModal';
+import LocationPromptModal from '../components/common/LocationPromptModal';
 import './AuthorityPortalPage.css';
 
 const STATUS_TABS = [
@@ -38,6 +40,7 @@ const DEFAULT_TIMEOUT_SECONDS = 300;
 export default function AuthorityPortalPage() {
   const { user, loginAuthority, updateAuthUser, logout } = useAuth();
   const { connectionStatus, subscribe } = useRealtime();
+  const { isLocationPromptOpen, closeLocationPrompt } = useAppLocation();
   const navigate = useNavigate();
 
   // Role-based Access Control Check
@@ -847,6 +850,12 @@ export default function AuthorityPortalPage() {
         isDanger={true}
         onConfirm={handleConfirmLogout}
         onCancel={() => setIsLogoutModalOpen(false)}
+      />
+
+      {/* Post-Auth Location Access Dialog */}
+      <LocationPromptModal
+        isOpen={isAuthorized && isLocationPromptOpen}
+        onClose={closeLocationPrompt}
       />
     </div>
   );

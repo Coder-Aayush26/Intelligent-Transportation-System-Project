@@ -1,11 +1,16 @@
-"""Seed script — populates the database with the same mock data that
-lives in src/data/mockData.js so the frontend shows real data immediately.
+"""Seed script — populates the database with the initial users and mock incidents
+so the frontend displays real data immediately.
 
-Called automatically by main.py on startup if the DB is empty.
+Called automatically by main.py on startup if collections are empty.
 """
 from datetime import datetime, timedelta
 import uuid
 import asyncio
+
+try:
+    from .auth import hash_password
+except ImportError:
+    from backend.auth import hash_password
 
 SEED_INCIDENTS = [
     {
@@ -25,6 +30,7 @@ SEED_INCIDENTS = [
         "map_position_top": "22%",
         "map_position_left": "26%",
         "is_active": 1,
+        "status": "Active",
         "minutes_ago": 2,
         "confirmations": 5,
         "contradictions": 0,
@@ -46,6 +52,7 @@ SEED_INCIDENTS = [
         "map_position_top": "52%",
         "map_position_left": "44%",
         "is_active": 1,
+        "status": "Active",
         "minutes_ago": 10,
         "confirmations": 3,
         "contradictions": 0,
@@ -67,62 +74,155 @@ SEED_INCIDENTS = [
         "map_position_top": "42%",
         "map_position_left": "12%",
         "is_active": 1,
+        "status": "Active",
         "minutes_ago": 15,
         "confirmations": 2,
         "contradictions": 1,
     },
 ]
 
-SEED_USER = {
-    "id": 1,
-    "name": "Aayush",
-    "full_name": "Aayush Praveen",
-    "email": "aayush@example.com",
-    "member_since": "May 2025",
-    "reliability_score": 4.6,
-    "reliability_label": "High Reliability",
+DEMO_PASSWORD_HASH = hash_password("password")
+
+SEED_USERS = [
+    {
+        "_id": "usr-demo",
+        "id": "usr-demo",
+        "name": "Demo User",
+        "full_name": "Demo User",
+        "email": "demo_user@example.com",
+        "password_hash": DEMO_PASSWORD_HASH,
+        "member_since": "May 2025",
+        "reliability_score": 4.6,
+        "reliability_label": "Active Contributor",
+        "role": "citizen",
+        "is_authority": False,
+        "department": "Indore Traffic Police Control Room",
+        "badge_number": "IND-TP-01",
+        "assigned_unit": "UNIT-TP-01",
+        "rank": "Municipal Operations Officer",
+        "status": "Active",
+    },
+    {
+        "_id": "usr-aayush",
+        "id": "usr-aayush",
+        "name": "Aayush",
+        "full_name": "Aayush Praveen",
+        "email": "aayush@example.com",
+        "password_hash": DEMO_PASSWORD_HASH,
+        "member_since": "May 2025",
+        "reliability_score": 4.8,
+        "reliability_label": "High Reliability",
+        "role": "citizen",
+        "is_authority": False,
+        "status": "Active",
+    },
+    {
+        "_id": "auth-officer-01",
+        "id": "auth-officer-01",
+        "user_id": "auth-officer-01",
+        "officer_id": "IND-TP-01",
+        "name": "Officer Sharma",
+        "full_name": "Officer Sharma",
+        "email": "officer@example.com",
+        "password_hash": DEMO_PASSWORD_HASH,
+        "role": "official",
+        "is_authority": True,
+        "department": "Indore Traffic Police Control Room",
+        "badge_number": "IND-TP-01",
+        "assigned_unit": "UNIT-TP-01",
+        "rank": "Municipal Operations Officer",
+        "status": "On Duty",
+        "reliability_score": 5.0,
+        "reliability_label": "Verified Authority Officer",
+    },
+]
+
+OFFICER_AUTHORITY_DOC = {
+    "_id": "auth-officer-01",
+    "id": "auth-officer-01",
+    "user_id": "auth-officer-01",
+    "officer_id": "IND-TP-01",
+    "name": "Officer Sharma",
+    "full_name": "Officer Sharma",
+    "email": "officer@example.com",
+    "department": "Indore Traffic Police Control Room",
+    "badge_number": "IND-TP-01",
+    "assigned_unit": "UNIT-TP-01",
+    "role": "official",
+    "rank": "Municipal Operations Officer",
+    "status": "On Duty",
+    "is_authority": True,
+    "reliability_score": 5.0,
+    "reliability_label": "Verified Authority Officer",
+    "created_at": datetime.utcnow(),
+    "last_active": datetime.utcnow(),
 }
 
 
 async def seed_db(db):
-    """Insert seed data only if collections are empty."""
-    user_count = await db.users.count_documents({})
-    if user_count == 0:
-        await db.users.insert_one(SEED_USER)
+    """Insert seed data into users, authorities, incidents, and verifications if empty."""
+    try:
+        user_count = await db.users.count_documents({})
+        if user_count == 0:
+            for u in SEED_USERS:
+                await db.users.insert_one(dict(u))
+            print(f"[OK] Seeded {len(SEED_USERS)} initial users (Demo User, Aayush, Officer).")
+    except Exception as e:
+        print(f"[Seed] Error seeding users: {e}")
 
-    inc_count = await db.incidents.count_documents({})
-    if inc_count == 0:
-        now = datetime.utcnow()
-        for data in SEED_INCIDENTS:
-            verif_c = data.pop("confirmations", 0)
-            verif_x = data.pop("contradictions", 0)
-            mins = data.pop("minutes_ago", 0)
-            
-            data["reported_at_full"] = now - timedelta(minutes=mins)
-            
-            await db.incidents.insert_one(data)
+    try:
+        if hasattr(db, "authorities"):
+            auth_count = await db.authorities.count_documents({})
+            if auth_count == 0:
+                await db.authorities.insert_one(dict(OFFICER_AUTHORITY_DOC))
+                print("[OK] Seeded authority personnel record (IND-TP-01).")
+    except Exception as e:
+        print(f"[Seed] Error seeding authorities: {e}")
 
-            verifications = []
-            for _ in range(verif_c):
-                verifications.append({"_id": uuid.uuid4().hex, "incident_id": data["id"], "verdict": "confirm", "created_at": now})
-            for _ in range(verif_x):
-                verifications.append({"_id": uuid.uuid4().hex, "incident_id": data["id"], "verdict": "contradict", "created_at": now})
-                
-            if verifications:
-                await db.verifications.insert_many(verifications)
+    try:
+        inc_count = await db.incidents.count_documents({})
+        if inc_count == 0:
+            now = datetime.utcnow()
+            for raw in SEED_INCIDENTS:
+                data = dict(raw)
+                verif_c = data.pop("confirmations", 0)
+                verif_x = data.pop("contradictions", 0)
+                mins = data.pop("minutes_ago", 0)
+                data["reported_at_full"] = now - timedelta(minutes=mins)
+                data["last_activity_at"] = now - timedelta(minutes=mins)
+                await db.incidents.insert_one(data)
 
-        print("[OK] MongoDB seeded with sample incidents.")
-    else:
-        print("[INFO] MongoDB already has data -- skipping seed.")
+                verifications = []
+                for _ in range(verif_c):
+                    verifications.append({
+                        "_id": uuid.uuid4().hex,
+                        "incident_id": data["id"],
+                        "verdict": "confirm",
+                        "created_at": now - timedelta(minutes=mins),
+                    })
+                for _ in range(verif_x):
+                    verifications.append({
+                        "_id": uuid.uuid4().hex,
+                        "incident_id": data["id"],
+                        "verdict": "contradict",
+                        "created_at": now - timedelta(minutes=mins),
+                    })
+                if verifications:
+                    await db.verifications.insert_many(verifications)
+
+            print("[OK] Seeded sample incidents and verifications.")
+    except Exception as e:
+        print(f"[Seed] Error seeding incidents: {e}")
+
 
 if __name__ == "__main__":
     from motor.motor_asyncio import AsyncIOMotorClient
     from .database import MONGO_URI, MONGO_DB
-    
+
     async def main():
         client = AsyncIOMotorClient(MONGO_URI)
         db = client[MONGO_DB]
         await seed_db(db)
         client.close()
-        
+
     asyncio.run(main())

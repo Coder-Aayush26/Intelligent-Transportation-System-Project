@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { HeatLayer } from 'leaflet.heat';
+import 'leaflet.heat';
 import { Layers, Sliders, AlertTriangle, Navigation, MapPin } from 'lucide-react';
 import { useAppLocation } from '../../context/LocationContext';
 import { useAuth } from '../../context/AuthContext';
@@ -60,7 +60,9 @@ function HeatLayerComponent({ points = [], radius = 25, blur = 18, max = 1.0, is
     );
     if (validPoints.length === 0) return;
 
-    const heat = new HeatLayer(validPoints, {
+    if (!L.heatLayer) return;
+
+    const heat = L.heatLayer(validPoints, {
       radius: Number(radius),
       blur: Number(blur),
       max: Number(max),

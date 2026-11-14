@@ -32,6 +32,19 @@ export default function LoginPage() {
     }
   }
 
+  async function handleDemoLogin() {
+    setError('');
+    setLoading(true);
+    try {
+      await login('Demo User', 'demo123');
+      navigate('/app/dashboard', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Could not sign in with demo user.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -47,7 +60,30 @@ export default function LoginPage() {
         <h1 className="auth-title">Welcome back</h1>
         <p className="auth-sub">Sign in with your Login ID or Email to continue.</p>
 
-        {error && <div className="auth-error">⚠ {error}</div>}
+        {error && (
+          <div className="auth-error" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span>⚠ {error}</span>
+            {error.includes('Server Error') && (
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                style={{
+                  background: 'none',
+                  border: '1px solid currentColor',
+                  color: 'inherit',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                ⚡ Sign in with Demo Account instead
+              </button>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <label>Email or Login ID</label>
@@ -72,6 +108,26 @@ export default function LoginPage() {
 
           <button type="submit" className="auth-btn" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', margin: '14px 0 8px', gap: '8px' }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border, #dde3f0)' }}></div>
+            <span style={{ fontSize: '11px', color: 'var(--muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or test instantly</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border, #dde3f0)' }}></div>
+          </div>
+
+          <button 
+            type="button" 
+            className="auth-btn" 
+            style={{ 
+              background: 'linear-gradient(135deg, #10b981, #059669)', 
+              marginTop: 0,
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)' 
+            }}
+            onClick={handleDemoLogin}
+            disabled={loading}
+          >
+            ⚡ One-Click Demo Sign In
           </button>
         </form>
 
