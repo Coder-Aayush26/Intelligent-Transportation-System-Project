@@ -79,6 +79,56 @@ SEED_INCIDENTS = [
         "confirmations": 2,
         "contradictions": 1,
     },
+    {
+        "id": "inc-4",
+        "category": "Accident",
+        "location": "Palasia Square, AB Road",
+        "full_location": "Palasia Square, AB Road, Indore",
+        "lat": 22.7212,
+        "lng": 75.8592,
+        "severity": "High",
+        "confidence": 88,
+        "reporter": "Traffic_Patrol_MP",
+        "description": "Two vehicles collision blocking north-bound carriageway. Emergency response on site.",
+        "source": "Mobile App",
+        "media_count": 0,
+        "media_urls": [],
+        "ai_assessment": "Likely Real",
+        "ai_authenticity_score": 92,
+        "ai_verified": True,
+        "map_position_top": "28%",
+        "map_position_left": "30%",
+        "is_active": 1,
+        "status": "Active",
+        "minutes_ago": 3,
+        "confirmations": 4,
+        "contradictions": 0,
+    },
+    {
+        "id": "inc-5",
+        "category": "Accident",
+        "location": "Akota Bridge Crossway",
+        "full_location": "Akota Bridge Crossway, Vadodara",
+        "lat": 22.2562,
+        "lng": 73.2185,
+        "severity": "Critical",
+        "confidence": 90,
+        "reporter": "Citizen_Alert_Gujarat",
+        "description": "Major collision at crossway, right lane obstructed. Heavy traffic slowdown.",
+        "source": "Mobile App",
+        "media_count": 0,
+        "media_urls": [],
+        "ai_assessment": "Likely Real",
+        "ai_authenticity_score": 92,
+        "ai_verified": True,
+        "map_position_top": "35%",
+        "map_position_left": "32%",
+        "is_active": 1,
+        "status": "Active",
+        "minutes_ago": 5,
+        "confirmations": 3,
+        "contradictions": 0,
+    },
 ]
 
 DEMO_PASSWORD_HASH = hash_password("password")
@@ -94,6 +144,10 @@ SEED_USERS = [
         "member_since": "May 2025",
         "reliability_score": 4.6,
         "reliability_label": "Active Contributor",
+        "lat": 22.7196,
+        "lng": 75.8577,
+        "latitude": 22.7196,
+        "longitude": 75.8577,
         "role": "citizen",
         "is_authority": False,
         "department": "Indore Traffic Police Control Room",
@@ -112,6 +166,10 @@ SEED_USERS = [
         "member_since": "May 2025",
         "reliability_score": 4.8,
         "reliability_label": "High Reliability",
+        "lat": 22.7196,
+        "lng": 75.8577,
+        "latitude": 22.7196,
+        "longitude": 75.8577,
         "role": "citizen",
         "is_authority": False,
         "status": "Active",
@@ -180,11 +238,11 @@ async def seed_db(db):
         print(f"[Seed] Error seeding authorities: {e}")
 
     try:
-        inc_count = await db.incidents.count_documents({})
-        if inc_count == 0:
-            now = datetime.utcnow()
-            for raw in SEED_INCIDENTS:
-                data = dict(raw)
+        now = datetime.utcnow()
+        for raw in SEED_INCIDENTS:
+            data = dict(raw)
+            exists = await db.incidents.find_one({"id": data["id"]})
+            if not exists:
                 verif_c = data.pop("confirmations", 0)
                 verif_x = data.pop("contradictions", 0)
                 mins = data.pop("minutes_ago", 0)
@@ -209,8 +267,8 @@ async def seed_db(db):
                     })
                 if verifications:
                     await db.verifications.insert_many(verifications)
-
-            print("[OK] Seeded sample incidents and verifications.")
+                print(f"[OK] Seeded incident {data['id']}: {data['category']} at {data['location']}")
+        print("[OK] Seeded sample incidents and verifications.")
     except Exception as e:
         print(f"[Seed] Error seeding incidents: {e}")
 

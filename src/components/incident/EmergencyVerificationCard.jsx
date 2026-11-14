@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   AlertTriangle, 
   ThumbsUp, 
@@ -57,17 +57,35 @@ export default function EmergencyVerificationCard() {
   const [showPhoto, setShowPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null); // { type, message, sub }
-  const [hasPromptedThisSession, setHasPromptedThisSession] = useState(false);
 
   const timerRef = useRef(null);
+  const checkedCoordsRef = useRef({ lat: null, lng: null });
   const activeIncident = queue[currentIndex] || null;
 
-  // Active user voter coordinates
-  const voterCoords = deviceLocation?.lat != null
-    ? { lat: deviceLocation.lat, lng: deviceLocation.lng }
+  // Active user voter coordinates (stable primitive numbers)
+  const userLat = selectedLocation?.isCustom && selectedLocation?.lat != null
+    ? selectedLocation.lat
+    : deviceLocation?.lat != null
+    ? deviceLocation.lat
     : selectedLocation?.lat != null
-    ? { lat: selectedLocation.lat, lng: selectedLocation.lng }
-    : null;
+    ? selectedLocation.lat
+    : 22.7196;
+
+  const userLng = selectedLocation?.isCustom && selectedLocation?.lng != null
+    ? selectedLocation.lng
+    : deviceLocation?.lng != null
+    ? deviceLocation.lng
+    : selectedLocation?.lng != null
+    ? selectedLocation.lng
+    : 75.8577;
+
+  // Stable coordinates object
+  const voterCoords = useMemo(() => {
+    if (userLat != null && userLng != null) {
+      return { lat: userLat, lng: userLng };
+    }
+    return null;
+  }, [userLat, userLng]);
 
   // Load emergency incidents within 1km
   const checkRadar = useCallback(async (forced = false) => {
@@ -89,25 +107,28 @@ export default function EmergencyVerificationCard() {
         setFeedback(null);
         setIsOpen(true);
         playEmergencyChime();
-        setHasPromptedThisSession(true);
       }
     } catch (err) {
       console.warn('Emergency radar check failed:', err);
     }
   }, [isLoggedIn, isLocationPromptOpen, voterCoords, user]);
 
-  // Initial check triggered once location is ready and post-auth dialog has completed
+  // Trigger check whenever logged in, location prompt is not blocking, and coordinates change
   useEffect(() => {
-    if (!isLoggedIn || isLocationPromptOpen || !voterCoords) return;
-    if (hasPromptedThisSession) return;
+    if (!isLoggedIn || isLocationPromptOpen || userLat == null || userLng == null) return;
 
-    // Small delay to let UI settle smoothly
+    // Check if we already inspected these exact coordinates
+    const prev = checkedCoordsRef.current;
+    if (prev.lat === userLat && prev.lng === userLng) return;
+    checkedCoordsRef.current = { lat: userLat, lng: userLng };
+
+    // Small 400ms buffer to allow DOM/view to stabilize
     const timer = setTimeout(() => {
       checkRadar();
-    }, 1200);
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [isLoggedIn, isLocationPromptOpen, voterCoords, hasPromptedThisSession, checkRadar]);
+  }, [isLoggedIn, isLocationPromptOpen, userLat, userLng, checkRadar]);
 
   // Subscribe to real-time incident_created events
   useEffect(() => {

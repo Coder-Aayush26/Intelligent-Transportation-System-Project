@@ -88,6 +88,11 @@ export function AuthProvider({ children }) {
       });
       try {
         sessionStorage.removeItem('its_loc_prompt_dismissed');
+        Object.keys(sessionStorage).forEach((k) => {
+          if (k.startsWith('its_skip_verif_')) {
+            sessionStorage.removeItem(k);
+          }
+        });
       } catch {
         // ignore
       }
