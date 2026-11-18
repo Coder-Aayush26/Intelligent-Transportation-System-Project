@@ -15,7 +15,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from . import database
 from .database import MONGO_URI
-from .routers import incidents, users, verifications, location
+from .routers import incidents, users, verifications, location, notifications
 from .routers import auth as auth_router
 from .realtime import realtime_manager
 
@@ -105,6 +105,8 @@ app.include_router(users.router, prefix="/api")
 app.include_router(users.router)
 app.include_router(verifications.router, prefix="/api")
 app.include_router(verifications.router)
+app.include_router(notifications.router, prefix="/api")
+app.include_router(notifications.router)
 
 
 @app.get("/")

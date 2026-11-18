@@ -32,3 +32,4 @@ __pycache__/
 *$py.class
 .venv/
 .pytest_cache/
+backend/vapid_keys.json

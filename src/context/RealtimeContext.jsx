@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { registerServiceWorker } from '../services/pushNotification';
 
 const RealtimeContext = createContext(null);
 
@@ -40,6 +41,13 @@ export function RealtimeProvider({ children }) {
   const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const navigate = useNavigate();
+
+  // Register service worker for native Web Push notifications
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      registerServiceWorker().catch(() => {});
+    }
+  }, []);
 
   // Register listener for specific event types (e.g. incident_created, incident_resolved)
   const subscribe = useCallback((eventType, callback) => {
@@ -93,7 +101,6 @@ export function RealtimeProvider({ children }) {
 
     if (type === 'incident_created') {
       const inc = data;
-      const isCriticalOrHigh = inc.severity === 'Critical' || inc.severity === 'High';
 
       // 1. In-App Toast
       const toastId = `toast-${inc.id}-${Date.now()}`;

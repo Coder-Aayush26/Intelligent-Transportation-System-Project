@@ -21,3 +21,4 @@ chardet>=5.2.0
 certifi
 Pillow>=10.0.0
 mongomock-motor>=0.0.36
+pywebpush>=2.0.0

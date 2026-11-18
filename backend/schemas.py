@@ -321,3 +321,36 @@ def _format_dt(dt: datetime) -> str:
     # %d gives zero-padded day; lstrip removes the leading zero on single-digit days.
     day = dt.strftime("%d").lstrip("0") or "0"
     return dt.strftime(f"{day} %b %Y, %I:%M %p")
+
+
+# --- Web Push Notification Schemas ---
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    radius: Optional[float] = 2.0
+
+
+class PushSubscriptionOut(BaseModel):
+    status: str
+    endpoint: str
+    message: str
+
+
+class VapidPublicKeyOut(BaseModel):
+    public_key: str
+
+
+class TestPushRequest(BaseModel):
+    endpoint: Optional[str] = None
+    title: Optional[str] = "🚨 ITS Test Alert: Road Hazard"
+    body: Optional[str] = "Testing lockscreen push notification and action buttons."
+    incident_id: Optional[str] = "inc-test-demo"
+

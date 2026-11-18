@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppLocation } from '../context/LocationContext';
 import { fetchUserSettings, updateUserSettings, updateUserLocation } from '../api/users';
+import {
+  isPushNotificationSupported,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
+  sendTestPushAlert,
+  displayLocalNotification,
+} from '../services/pushNotification';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/common/ConfirmModal';
 import EditProfileModal from '../components/profile/EditProfileModal';
@@ -45,6 +52,10 @@ export default function SettingsPage() {
   // Browser notification status
   const [browserPerm, setBrowserPerm] = useState(() => {
     return typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+  });
+  const [testingPush, setTestingPush] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(() => {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('its_push_subscribed') === 'true';
   });
 
   // Location tracking status
@@ -180,28 +191,68 @@ export default function SettingsPage() {
 
   // Section 4: Browser Notification request
   const handleRequestBrowserPermission = async () => {
-    if (typeof Notification === 'undefined') {
+    if (!isPushNotificationSupported()) {
       setErrorMessage('Browser push notifications are not supported on this platform.');
       return;
     }
 
     try {
-      const perm = await Notification.requestPermission();
-      setBrowserPerm(perm);
-      if (perm === 'granted') {
-        const updated = { ...settings, browserNotificationsEnabled: true };
-        persistSettings(updated);
-        showStatus('Browser notifications enabled.');
-        new Notification('ITS Alerts Active', {
-          body: 'You will receive real-time incident notifications while this browser session is active.',
-        });
-      } else {
-        const updated = { ...settings, browserNotificationsEnabled: false };
-        persistSettings(updated);
-        setErrorMessage('Browser notifications were blocked. Please enable them in your browser URL bar.');
-      }
+      showStatus('Subscribing to native push notifications...');
+      const lat = sessionStorage.getItem('its_lat') || null;
+      const lng = sessionStorage.getItem('its_lng') || null;
+      await subscribeToPushNotifications({
+        lat,
+        lng,
+        radius: settings?.notificationRadius || 2.0,
+      });
+
+      setBrowserPerm('granted');
+      setPushSubscribed(true);
+      const updated = { ...settings, browserNotificationsEnabled: true };
+      persistSettings(updated);
+      showStatus('Native Web Push enabled! Lockscreen alerts are active.');
+
+      // Immediately display confirmation notification on screen
+      await displayLocalNotification({
+        title: '🚨 ITS Road Alerts Active',
+        body: 'You will now receive real-time road hazard alerts and lockscreen notifications.',
+      });
     } catch (err) {
-      setErrorMessage('Failed to request notification permission: ' + err.message);
+      if (typeof Notification !== 'undefined') {
+        setBrowserPerm(Notification.permission);
+      }
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to subscribe to push notifications.');
+    }
+  };
+
+  const handleDisableBrowserNotifications = async () => {
+    try {
+      showStatus('Disabling push notifications...');
+      await unsubscribeFromPushNotifications();
+      setPushSubscribed(false);
+      const updated = { ...settings, browserNotificationsEnabled: false };
+      persistSettings(updated);
+      showStatus('Push notifications disabled.');
+    } catch (err) {
+      setErrorMessage('Failed to unsubscribe: ' + err.message);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    setTestingPush(true);
+    setErrorMessage('');
+    try {
+      showStatus('Triggering lockscreen test alert...');
+      await sendTestPushAlert();
+      setPushSubscribed(true);
+      setBrowserPerm('granted');
+      const updated = { ...settings, browserNotificationsEnabled: true };
+      persistSettings(updated);
+      showStatus('Test alert displayed! Check your device notifications.');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to send test push alert.');
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -431,24 +482,47 @@ export default function SettingsPage() {
         <div className="browser-notif-box">
           <div className="browser-notif-info">
             <span className="notif-badge">
-              Permission: <b>{browserPerm.toUpperCase()}</b>
+              Permission: <b>{browserPerm.toUpperCase()}</b> {pushSubscribed && '• PUSH ACTIVE 🟢'}
             </span>
             <p className="notif-explanation">
-              In-session alerts display toast messages while the app is open. Enabling browser push notifications allows banner notifications on your desktop or mobile device during your active browsing session.
+              Native lockscreen push notifications deliver critical traffic alerts to your device even when your browser is closed. Includes interactive action buttons to confirm or clear hazards.
             </p>
           </div>
 
-          {browserPerm !== 'granted' && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRequestBrowserPermission}
-              disabled={browserPerm === 'denied'}
-            >
-              {browserPerm === 'denied' ? 'Permission Denied in Browser' : 'Enable Browser Notifications'}
-            </Button>
-          )}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+            {browserPerm !== 'granted' || !pushSubscribed ? (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleRequestBrowserPermission}
+                disabled={browserPerm === 'denied'}
+              >
+                {browserPerm === 'denied' ? 'Permission Denied in Browser' : 'Enable Lockscreen Push Alerts'}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDisableBrowserNotifications}
+              >
+                Disable Push Alerts
+              </Button>
+            )}
+
+            {browserPerm === 'granted' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSendTestPush}
+                disabled={testingPush}
+              >
+                {testingPush ? 'Dispatching…' : '⚡ Test Lockscreen Alert'}
+              </Button>
+            )}
+          </div>
         </div>
       </section>
 

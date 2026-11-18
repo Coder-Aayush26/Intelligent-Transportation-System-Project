@@ -403,6 +403,22 @@ async def create_incident(
 
         await db.incidents.update_one({"id": matched_incident["id"]}, {"$set": update_fields})
         matched_incident.update(update_fields)
+
+        # Tier 2: Spatial Web Push Dispatcher for consolidated High/Critical hazards
+        if matched_incident.get("severity") in ("Critical", "High"):
+            try:
+                import asyncio
+                from ..services.push import dispatch_incident_push_notifications
+                asyncio.create_task(
+                    dispatch_incident_push_notifications(
+                        db=db,
+                        incident=matched_incident,
+                        exclude_user_id=reporter_user_id,
+                    )
+                )
+            except Exception:
+                pass
+
         return IncidentOut.from_mongo_doc(matched_incident, verif)
 
     # =============================================================
@@ -495,6 +511,21 @@ async def create_incident(
         await realtime_manager.broadcast("incident_created", out_incident.model_dump())
     except Exception:
         pass
+
+    # Tier 2: Spatial Web Push Dispatcher to nearby commuters (non-blocking)
+    try:
+        import asyncio
+        from ..services.push import dispatch_incident_push_notifications
+        asyncio.create_task(
+            dispatch_incident_push_notifications(
+                db=db,
+                incident=inc_doc,
+                exclude_user_id=reporter_user_id,
+            )
+        )
+    except Exception:
+        pass
+
     return out_incident
 
 
