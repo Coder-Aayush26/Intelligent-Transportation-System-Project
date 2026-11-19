@@ -207,6 +207,28 @@ async def create_incident(
     _validate_coords(payload.lat, payload.lng)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
+    # Strict Description Quality & Gibberish / Keystroke Validation
+    clean_desc = (payload.description or "").strip()
+    if len(clean_desc) < 8:
+        raise HTTPException(
+            status_code=422,
+            detail="Incident description is too brief. Please provide at least 8 characters describing the condition or disruption.",
+        )
+
+    words = [w for w in re.split(r"\s+", clean_desc) if len(w) > 1]
+    if len(words) < 2 and len(clean_desc) < 15:
+        raise HTTPException(
+            status_code=422,
+            detail="Incident description lacks detail. Please provide at least 2 descriptive words explaining what happened.",
+        )
+
+    unique_chars = set(clean_desc.lower().replace(" ", ""))
+    if len(unique_chars) < 4 or any(re.match(r"^[bcdfghjklmnpqrstvwxyz]{5,}$", w.lower()) for w in words):
+        raise HTTPException(
+            status_code=422,
+            detail="Incident description appears to be repetitive keystrokes or invalid gibberish. Please provide an authentic description of the roadway condition.",
+        )
+
     # Automatically expire stale incidents first so they don't capture new reports as duplicates
     await auto_expire_stale_incidents(db, now)
 

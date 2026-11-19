@@ -75,13 +75,18 @@ def _make_test_photo_b64():
     return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
 
 
+from unittest.mock import patch
+import backend.services.confidence as conf_mod
+
+
 def test_media_heuristic():
     """Verify media heuristic fallback when Gemini API is offline."""
-    score, assessment = evaluate_media_alignment("Heavy accident with crushed bumper and wreckage", [_make_test_photo_b64()])
-    assert score is not None
-    assert score >= 0.70
-    assert "accident" in assessment.lower() or "vehicle" in assessment.lower()
-    print(f"[PASS] Media heuristic fallback verified: score={score}, assessment='{assessment}'")
+    with patch.object(conf_mod, "get_gemini_api_key", return_value=""):
+        score, assessment = evaluate_media_alignment("Heavy accident with crushed bumper and wreckage", [_make_test_photo_b64()])
+        assert score is not None
+        assert score >= 0.70
+        assert "accident" in assessment.lower() or "vehicle" in assessment.lower()
+        print(f"[PASS] Media heuristic fallback verified: score={score}, assessment='{assessment}'")
 
 
 if __name__ == "__main__":

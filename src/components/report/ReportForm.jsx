@@ -96,6 +96,25 @@ export default function ReportForm({ onLocationAcquired }) {
       return;
     }
 
+    const trimmedDesc = (description || '').trim();
+    if (trimmedDesc.length < 8) {
+      setError('Description is too brief. Please provide at least 8 characters describing the condition.');
+      setSubmitting(false);
+      return;
+    }
+    const words = trimmedDesc.split(/\s+/).filter(w => w.length > 1);
+    if (words.length < 2 && trimmedDesc.length < 15) {
+      setError('Please provide at least 2 descriptive words explaining what happened.');
+      setSubmitting(false);
+      return;
+    }
+    const uniqueChars = new Set(trimmedDesc.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    if (uniqueChars.size < 4 || words.some(w => /^[bcdfghjklmnpqrstvwxyz]{5,}$/i.test(w))) {
+      setError('Please enter an authentic description instead of repetitive keystrokes or gibberish.');
+      setSubmitting(false);
+      return;
+    }
+
     const baseAddr = (locAddress || DEFAULT_ADDRESS).trim();
     const finalAddress = landmarkDetail.trim() ? `${landmarkDetail.trim()}, ${baseAddr}` : baseAddr;
     const shortLocation = (landmarkDetail.trim() || baseAddr.split(',')[0] || 'Current Location').trim();

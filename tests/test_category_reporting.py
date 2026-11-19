@@ -148,12 +148,16 @@ class MockDB:
         self.users = MockCollection()
 
 
+from unittest.mock import patch
+
+
 @pytest.fixture
 def client():
     mock_db = MockDB()
     app.dependency_overrides[get_db] = lambda: mock_db
     test_client = TestClient(app)
-    yield test_client
+    with patch("backend.services.confidence.get_gemini_api_key", return_value=""):
+        yield test_client
     app.dependency_overrides.clear()
 
 

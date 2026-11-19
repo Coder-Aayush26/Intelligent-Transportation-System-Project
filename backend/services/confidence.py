@@ -13,33 +13,26 @@ import io
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageFilter, ImageStat
 import requests
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-_FALLBACK_KEY_B64 = "QVEuQWI4Uk42SnlmUlE4dXJXZGxFby1NN0JOZFZ4eF83RllENHE0Tjc4WnZ0b0Q3LVJYVVE="
-
-
 def get_gemini_api_key() -> str:
-    key = os.getenv("GEMINI_API_KEY")
-    if not key:
-        try:
-            key = base64.b64decode(_FALLBACK_KEY_B64).decode("utf-8")
-        except Exception:
-            key = ""
-    return key
+    """Retrieve Gemini API key strictly from environment variables."""
+    return os.getenv("GEMINI_API_KEY", "").strip()
 
 
 # Candidate vision models with active verified quota in order of preference
 CANDIDATE_VISION_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3-flash-preview",
 ]
 
 
@@ -98,6 +91,28 @@ def _pre_inspect_image_bytes(raw_bytes: bytes) -> Optional[Dict[str, Any]]:
                 "is_traffic_road_context": False,
                 "reasoning": "Color standard deviation indicates non-photographic dummy block.",
             }
+
+        # Check for digital icons, vector graphics, or placeholder avatar clip art
+        if width >= 80 and height >= 80:
+            gray = img.convert("L")
+            edges = gray.filter(ImageFilter.FIND_EDGES)
+            stat_edges = ImageStat.Stat(edges)
+            edge_mean = stat_edges.mean[0]
+            # Digital icons and placeholder silhouettes typically have very low edge density (< 3.5)
+            # and restricted color palette (< 512 distinct colors)
+            if edge_mean < 3.5:
+                colors = img_rgb.getcolors(maxcolors=512)
+                if colors is not None:
+                    return {
+                        "score": 0.0,
+                        "assessment": "Image appears to be a digital icon, vector graphic, or synthetic placeholder.",
+                        "detected_scene": "Digital graphic or placeholder avatar icon",
+                        "evidence_quality": "synthetic_or_dummy",
+                        "description_consistency": "irrelevant_or_fabricated",
+                        "is_real_world_scene": False,
+                        "is_traffic_road_context": False,
+                        "reasoning": "Sparse edge density and restricted color palette characteristic of digital icons or clip art.",
+                    }
     except Exception as e:
         logger.warning("Pillow pre-inspection exception: %s", e)
 
@@ -118,99 +133,126 @@ def _heuristic_media_alignment(
         if pre_result:
             return pre_result
 
-    desc_lower = (description or "").lower().strip()
+    desc_clean = (description or "").strip()
+    desc_lower = desc_clean.lower()
     cat_lower = (category or "").lower().strip()
-    corpus = f"{cat_lower} {desc_lower}".strip()
 
-    # Category and keyword matching for all standard road incident categories
-    is_accident = (
-        cat_lower in ("accident", "crash", "collision") or
-        any(w in corpus for w in ["crash", "accident", "collision", "hit", "damage", "wreck", "bumper", "fatal", "overturned", "fender", "dent", "pileup", "vehicle"])
+    # 1. Check for gibberish, repetitive keystrokes, or excessively short descriptions
+    unique_chars = set(desc_lower.replace(" ", ""))
+    words = [w for w in desc_lower.split() if len(w) > 1]
+    is_gibberish = (
+        len(desc_clean) < 8 or
+        len(words) < 2 or
+        len(unique_chars) < 4 or
+        any(re.match(r"^[bcdfghjklmnpqrstvwxyz]{5,}$", w) for w in words)
     )
-    is_water = (
-        cat_lower in ("waterlogging", "flood", "drainage") or
-        any(w in corpus for w in ["water", "waterlogging", "flood", "drain", "rain", "puddle", "deep", "submerged", "overflow", "monsoon", "waterlogged", "water-logging"])
-    )
-    is_jam = (
-        cat_lower in ("traffic jam", "congestion", "traffic") or
-        any(w in corpus for w in ["jam", "traffic", "congestion", "slow", "standstill", "heavy", "gridlock", "queue", "bottleneck", "crawl", "choke"])
-    )
-    is_hazard = (
-        cat_lower in ("road hazard", "hazard", "pothole") or
-        any(w in corpus for w in ["hazard", "pothole", "crater", "debris", "oil", "broken", "wire", "rough", "cracked", "damage", "dangerous"])
-    )
-    is_blockage = (
-        cat_lower in ("road blockage", "blockage") or
-        any(w in corpus for w in ["block", "blockage", "blocked", "tree", "fallen", "barrier", "obstruction", "dump", "pole", "broken down"])
-    )
-    is_closure = (
-        cat_lower in ("road closure", "closure") or
-        any(w in corpus for w in ["closure", "closed", "diversion", "detour", "barricade", "sealed", "no entry"])
-    )
-    is_construction = (
-        cat_lower in ("construction", "roadwork") or
-        any(w in corpus for w in ["construction", "roadwork", "work", "repair", "metro", "excavator", "digging", "cement", "tar", "cones"])
-    )
+    if is_gibberish:
+        return {
+            "score": 0.10,
+            "assessment": "Incident description is too brief or contains repetitive invalid keystrokes.",
+            "detected_scene": "Unsubstantiated submission with invalid description",
+            "evidence_quality": "synthetic_or_dummy",
+            "description_consistency": "irrelevant_or_fabricated",
+            "is_real_world_scene": False,
+            "is_traffic_road_context": False,
+            "reasoning": "Description text lacks coherent words or recognizable traffic incident details.",
+        }
 
-    # Detect obvious non-incident spam description ONLY when category is missing and explicit non-traffic words exist
-    has_traffic_context = is_accident or is_water or is_jam or is_hazard or is_blockage or is_closure or is_construction
-    if not has_traffic_context and not cat_lower:
-        non_traffic_spam = ["cat", "dog", "coffee", "selfie", "food", "party", "meme", "cartoon", "game", "movie"]
-        if any(w in desc_lower for w in non_traffic_spam):
-            return {
-                "score": 0.20,
-                "assessment": "Image provided, but user description does not detail a recognizable road disruption.",
-                "detected_scene": "General non-traffic scene with non-incident description",
-                "evidence_quality": "weak",
-                "description_consistency": "inconsistent_mismatch",
-                "is_real_world_scene": True,
-                "is_traffic_road_context": False,
-                "reasoning": "Description text lacks verifiable traffic incident indicators.",
-            }
+    # 2. Check for explicit non-traffic spam keywords
+    non_traffic_spam = [
+        "cat", "dog", "coffee", "selfie", "food", "party", "meme",
+        "cartoon", "game", "movie", "bedroom", "pasta", "pizza",
+        "kitten", "puppy", "latte", "restaurant", "dessert", "cafe"
+    ]
+    if any(w in desc_lower for w in non_traffic_spam):
+        return {
+            "score": 0.15,
+            "assessment": "User description details indoor or non-traffic subject matter rather than roadway disruption.",
+            "detected_scene": "Non-traffic subject matter",
+            "evidence_quality": "weak",
+            "description_consistency": "inconsistent_mismatch",
+            "is_real_world_scene": True,
+            "is_traffic_road_context": False,
+            "reasoning": "Description contains keywords inconsistent with road and transportation incidents.",
+        }
 
-    # High authenticity scoring for valid photographic evidence matched to category/description
-    if is_accident:
+    # 3. Check for specific incident keywords vs general roadway context
+    has_accident_kw = any(w in desc_lower for w in ["crash", "accident", "collision", "hit", "damage", "wreck", "bumper", "fatal", "overturned", "fender", "dent", "pileup", "vehicle", "car"])
+    has_water_kw = any(w in desc_lower for w in ["water", "waterlogging", "flood", "drain", "rain", "puddle", "deep", "submerged", "overflow", "monsoon", "waterlogged", "water-logging"])
+    has_jam_kw = any(w in desc_lower for w in ["jam", "traffic", "congestion", "slow", "standstill", "heavy", "gridlock", "queue", "bottleneck", "crawl", "choke"])
+    has_hazard_kw = any(w in desc_lower for w in ["hazard", "pothole", "crater", "debris", "oil", "broken", "wire", "rough", "cracked", "damage", "dangerous", "spill"])
+    has_blockage_kw = any(w in desc_lower for w in ["block", "blockage", "blocked", "tree", "fallen", "barrier", "obstruction", "dump", "pole", "broken down"])
+    has_closure_kw = any(w in desc_lower for w in ["closure", "closed", "diversion", "detour", "barricade", "sealed", "no entry"])
+    has_construction_kw = any(w in desc_lower for w in ["construction", "roadwork", "work", "repair", "metro", "excavator", "digging", "cement", "tar", "cones"])
+
+    has_road_context = any(w in desc_lower for w in [
+        "road", "street", "lane", "highway", "route", "way", "junction",
+        "intersection", "flyover", "bridge", "expressway", "crossroad",
+        "avoid", "taking", "pass", "square", "near", "traffic", "ramp",
+        "surface", "spill", "oil", "slippery", "hazard", "pothole"
+    ])
+
+    # Check whether the description corroborates the reported category
+    cat_match = False
+    if cat_lower in ("accident", "crash", "collision") and (has_accident_kw or (has_road_context and "collision" in desc_lower)):
+        cat_match = True
         score = 0.88
         assessment = "Visual evidence aligns with reported vehicle impact and collision conditions."
         scene = "Roadway scene consistent with accident report"
-    elif is_water:
+    elif cat_lower in ("waterlogging", "flood", "drainage") and (has_water_kw or (has_road_context and ("water" in desc_lower or "avoid" in desc_lower))):
+        cat_match = True
         score = 0.86
         assessment = "Visual evidence aligns with roadway water accumulation and impeded drainage."
         scene = "Roadway scene consistent with waterlogging and flood conditions"
-    elif is_jam:
+    elif cat_lower in ("traffic jam", "congestion", "traffic") and (has_jam_kw or (has_road_context and "slow" in desc_lower)):
+        cat_match = True
         score = 0.84
         assessment = "Visual evidence aligns with high vehicle density and roadway congestion."
         scene = "Roadway scene consistent with traffic congestion report"
-    elif is_hazard:
+    elif cat_lower in ("road hazard", "hazard", "pothole") and (has_hazard_kw or (has_road_context and "rough" in desc_lower)):
+        cat_match = True
         score = 0.84
         assessment = "Visual evidence indicates road obstacle and roadway obstruction matching hazard report."
         scene = "Roadway scene consistent with road hazard report"
-    elif is_blockage:
+    elif cat_lower in ("road blockage", "blockage") and (has_blockage_kw or (has_road_context and "blocked" in desc_lower)):
+        cat_match = True
         score = 0.85
         assessment = "Visual evidence confirms roadway obstruction and lane blockage."
         scene = "Roadway scene consistent with road blockage report"
-    elif is_closure:
+    elif cat_lower in ("road closure", "closure") and (has_closure_kw or (has_road_context and "closed" in desc_lower)):
+        cat_match = True
         score = 0.84
         assessment = "Visual evidence confirms official roadway closure and traffic diversion."
         scene = "Roadway scene consistent with road closure report"
-    elif is_construction:
+    elif cat_lower in ("construction", "roadwork") and (has_construction_kw or (has_road_context and "work" in desc_lower)):
+        cat_match = True
         score = 0.85
         assessment = "Visual evidence confirms active roadwork and construction zone."
         scene = "Roadway scene consistent with construction report"
-    else:
+    elif has_road_context or has_accident_kw or has_water_kw or has_jam_kw or has_hazard_kw or has_blockage_kw or has_closure_kw or has_construction_kw:
+        cat_match = True
         score = 0.80
         assessment = "Photograph attached corroborates reported roadway condition."
         scene = "Roadway scene consistent with traffic report"
+    else:
+        cat_match = False
+        score = 0.35
+        assessment = "Description does not contain recognizable road context or incident indicators."
+        scene = "Ambiguous or unverified scene"
 
     return {
         "score": score,
         "assessment": assessment,
         "detected_scene": scene,
-        "evidence_quality": "strong" if score >= 0.85 else "moderate",
-        "description_consistency": "verified_match",
+        "evidence_quality": "strong" if score >= 0.85 else ("moderate" if score >= 0.70 else "weak"),
+        "description_consistency": "verified_match" if cat_match else "inconsistent_mismatch",
         "is_real_world_scene": True,
-        "is_traffic_road_context": True,
-        "reasoning": f"Photographic payload characteristics corroborate reported {category or 'road incident'} disruption.",
+        "is_traffic_road_context": cat_match,
+        "reasoning": (
+            f"Photographic payload and description keywords corroborate reported {category or 'road incident'} disruption."
+            if cat_match
+            else "Description lacks verifiable roadway disruption context matching the reported category."
+        ),
     }
 
 
