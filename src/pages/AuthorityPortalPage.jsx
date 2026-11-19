@@ -270,9 +270,9 @@ export default function AuthorityPortalPage() {
           </div>
 
           <div className="auth-header-actions">
-            <Link to="/" className="auth-header-link" title="Return to Landing Page">
+            <Link to="/" className="auth-header-link" title="Return to Home">
               <ArrowLeft size={16} />
-              <span>Landing Page</span>
+              <span>Home</span>
             </Link>
             <Link to="/app/dashboard" className="auth-header-link" title="Go to Public Citizen App">
               <ExternalLink size={15} />
@@ -380,7 +380,7 @@ export default function AuthorityPortalPage() {
                     className="gate-cancel-btn"
                     onClick={() => navigate('/')}
                   >
-                    ← Back to Landing Page
+                    ← Back to Home
                   </button>
                   <button
                     type="button"

@@ -2,10 +2,39 @@
 .app-shell {
   display: grid;
   grid-template-columns: 230px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   background: var(--bg);
   position: relative;
   overflow: hidden;
+}
+
+/* ── Main Scroll Container ───────────────────────────────────── */
+.app-main {
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.app-main::-webkit-scrollbar {
+  width: 6px;
+}
+.app-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-main::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.app-main::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 /* ── Animated Aurora Background ──────────────────────────────── */
@@ -58,8 +87,19 @@
 }
 
 @media (max-width: 900px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar   { display: none; }
+  .app-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    max-height: none;
+    overflow: visible;
+  }
+  .sidebar { display: none; }
+  .app-main {
+    height: auto;
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 /* ── Location Prompt Banner ────────────────────────────────────────── */

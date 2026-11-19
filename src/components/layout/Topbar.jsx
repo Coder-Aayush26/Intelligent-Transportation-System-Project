@@ -315,9 +315,9 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
       <div className="spacer" />
 
       <div className="topbar-actions">
-        <Link to="/" className="topbar-home-btn" title="Return to Landing Page">
+        <Link to="/" className="topbar-home-btn" title="Return to Home">
           <Home size={15} />
-          <span className="home-btn-label">Landing Page</span>
+          <span className="home-btn-label">Home</span>
         </Link>
       </div>
 
@@ -364,7 +364,7 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
                 onClick={() => setIsUserDropdownOpen(false)}
               >
                 <Home size={16} className="dropdown-item-icon" />
-                <span>Landing Page</span>
+                <span>Home</span>
               </Link>
 
               <Link

@@ -56,7 +56,7 @@ export default function Sidebar() {
     <>
       <aside className="sidebar">
         <div className="sb-top">
-          <Link to="/" className="sb-logo-link" title="Return to Landing Page">
+          <Link to="/" className="sb-logo-link" title="Return to Home">
             <div className="sb-logo">ITS</div>
           </Link>
           <button className="sb-menu" aria-label="Collapse sidebar">
@@ -65,10 +65,10 @@ export default function Sidebar() {
         </div>
 
         <nav aria-label="Main">
-          {/* Direct Home / Landing Page Action */}
-          <Link to="/" className="nav-item home-nav-item" title="Return to Home Landing Page">
+          {/* Direct Home Action */}
+          <Link to="/" className="nav-item home-nav-item" title="Return to Home">
             <Home size={18} className="ic" aria-hidden="true" />
-            <span>Landing Page</span>
+            <span>Home</span>
           </Link>
 
           <div className="sb-divider" role="separator" />

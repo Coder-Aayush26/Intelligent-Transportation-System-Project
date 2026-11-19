@@ -94,7 +94,7 @@ Modules or Tailwind is a natural next step.
 
 | Path                     | Page                          |
 |---------------------------|-------------------------------|
-| `/`                        | Landing page                   |
+| `/`                        | Home page                      |
 | `/app/dashboard`           | Live map + active incidents    |
 | `/app/report`               | Report a new incident          |
 | `/app/incidents/:id`        | Incident detail                |

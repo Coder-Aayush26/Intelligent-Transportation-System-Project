@@ -36,7 +36,7 @@ export default function AppLayout() {
         isOpen={isLocationPromptOpen} 
         onClose={closeLocationPrompt} 
       />
-      <main>
+      <main className="app-main">
         <Topbar title={title} />
         {!deviceLocation && permissionState !== 'denied' && (
           <div className="location-prompt-banner">
