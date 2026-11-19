@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { 
-  Plus, Minus, Eye, EyeOff, Filter, RotateCcw, X, Check
+  Plus, Minus, Eye, EyeOff, Filter, RotateCcw, X, Check, Route, Maximize2, Edit3
 } from 'lucide-react';
 import { mapLegend, CATEGORY_STYLES } from '../../data/mockData';
 import { useAppLocation } from '../../context/LocationContext';
 import { verifyIncident } from '../../api/incidents';
+import { getFavoriteRoutes, getRoutePolyline, subscribeFavorites } from '../../services/favoritesStorage';
+import AddFavoriteModal from '../common/AddFavoriteModal';
 import './LiveMap.css';
 
 // Fix Leaflet's default icon broken paths in bundlers
@@ -18,15 +20,24 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-/** Creates a coloured circle icon for each incident category */
+/** Cache for category pin icons to prevent expensive Leaflet DOM/icon reallocations on render */
+const PIN_ICON_CACHE = new Map();
+
 function makePinIcon(color, icon) {
-  return L.divIcon({
-    className: '',
-    html: `<div class="osm-pin" style="background:${color}">${icon}</div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -18],
-  });
+  const key = `${color}_${icon}`;
+  if (!PIN_ICON_CACHE.has(key)) {
+    PIN_ICON_CACHE.set(
+      key,
+      L.divIcon({
+        className: '',
+        html: `<div class="osm-pin" style="background:${color}">${icon}</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18],
+      })
+    );
+  }
+  return PIN_ICON_CACHE.get(key);
 }
 
 /** User device location marker — blue pulsing dot */
@@ -46,17 +57,71 @@ const SEARCHED_ICON = L.divIcon({
   popupAnchor: [0, -24],
 });
 
+/** Route Origin Pin (A) */
+const ROUTE_START_ICON = L.divIcon({
+  className: '',
+  html: `<div class="route-endpoint-pin start" title="Route Origin (Point A)">A</div>`,
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+  popupAnchor: [0, -14],
+});
+
+/** Route Destination Pin (B) */
+const ROUTE_END_ICON = L.divIcon({
+  className: '',
+  html: `<div class="route-endpoint-pin end" title="Route Destination (Point B)">B</div>`,
+  iconSize: [26, 26],
+  iconAnchor: [13, 13],
+  popupAnchor: [0, -14],
+});
+
 /**
  * Controller inside MapContainer to smoothly navigate the map when
  * coordinates change (e.g. searching "vadodara" or acquiring device GPS).
+ *
+ * NOTE: When disabled (e.g. while inspecting a favorite route), it avoids
+ * calling map.flyTo so that continuous device GPS updates do not snap the user away.
  */
-function MapController({ center, zoom = 13 }) {
+function MapController({ center, zoom = 13, disabled = false }) {
   const map = useMap();
+  const prevCenterRef = useRef(null);
+
   useEffect(() => {
-    if (center && !isNaN(center[0]) && !isNaN(center[1])) {
+    if (disabled) return;
+    if (!center || isNaN(center[0]) || isNaN(center[1])) return;
+
+    const prev = prevCenterRef.current;
+    if (!prev || Math.abs(prev[0] - center[0]) > 0.0001 || Math.abs(prev[1] - center[1]) > 0.0001) {
+      prevCenterRef.current = center;
       map.flyTo(center, zoom, { duration: 1.0 });
     }
-  }, [center, zoom, map]);
+  }, [center, zoom, map, disabled]);
+
+  return null;
+}
+
+/**
+ * Controller to automatically frame and fit the bounds of an inspected route.
+ * Crucial fix: Frames the bounds ONCE per route selection so user can freely
+ * zoom and pan without the camera fighting them.
+ */
+function RouteBoundsController({ routePoints, routeId }) {
+  const map = useMap();
+  const framedRouteIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!routeId || !routePoints || routePoints.length < 2) return;
+    if (framedRouteIdRef.current === routeId) return;
+    framedRouteIdRef.current = routeId;
+
+    try {
+      const bounds = L.latLngBounds(routePoints);
+      map.fitBounds(bounds, { padding: [65, 65], maxZoom: 15, duration: 1.0 });
+    } catch {
+      // ignore
+    }
+  }, [routePoints, routeId, map]);
+
   return null;
 }
 
@@ -99,6 +164,9 @@ export default function LiveMap({
   onToggleIncidentsVisible = null,
 }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeParam = searchParams.get('route');
+
   const { 
     selectedLocation, 
     deviceLocation, 
@@ -110,6 +178,71 @@ export default function LiveMap({
 
   // Quick verification votes cast from map popups
   const [popupVotes, setPopupVotes] = useState({});
+
+  // Inspected Route Polyline & Details State
+  const [inspectedRoute, setInspectedRoute] = useState(null);
+  const [routePolyline, setRoutePolyline] = useState([]);
+  const [loadingRouteGeometry, setLoadingRouteGeometry] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    const syncRoute = () => {
+      if (!routeParam) {
+        setInspectedRoute(null);
+        setRoutePolyline([]);
+        return;
+      }
+
+      const allRoutes = getFavoriteRoutes();
+      const found = allRoutes.find((r) => r.id === routeParam);
+      if (found && found.fromCoords && found.toCoords) {
+        setInspectedRoute(found);
+        setLoadingRouteGeometry(true);
+        getRoutePolyline(found.fromCoords, found.toCoords)
+          .then((pts) => {
+            if (isCurrent) {
+              setRoutePolyline(pts);
+              setLoadingRouteGeometry(false);
+            }
+          })
+          .catch(() => {
+            if (isCurrent) setLoadingRouteGeometry(false);
+          });
+      } else {
+        setInspectedRoute(null);
+        setRoutePolyline([]);
+      }
+    };
+
+    syncRoute();
+    const unsub = subscribeFavorites(syncRoute);
+    return () => {
+      isCurrent = false;
+      unsub();
+    };
+  }, [routeParam]);
+
+  const handleClearInspectedRoute = () => {
+    setInspectedRoute(null);
+    setRoutePolyline([]);
+    setSearchParams((prev) => {
+      const copy = new URLSearchParams(prev);
+      copy.delete('route');
+      return copy;
+    });
+  };
+
+  const handleRefitRoute = () => {
+    if (mapInstance && routePolyline.length >= 2) {
+      try {
+        const bounds = L.latLngBounds(routePolyline);
+        mapInstance.fitBounds(bounds, { padding: [65, 65], maxZoom: 15, duration: 0.8 });
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   const handleQuickVerify = async (e, incidentId, verdict, userCoord = null) => {
     e.stopPropagation();
@@ -229,8 +362,55 @@ export default function LiveMap({
           <div className="map-loading-overlay">Loading incidents…</div>
         )}
 
-        {/* ── Top-Left: Searched Location Badge ── */}
-        {selectedLocation.isCustom && (
+        {/* ── Top-Left: Inspected Route Banner or Searched Location Badge ── */}
+        {inspectedRoute ? (
+          <div className="map-inspected-route-chip">
+            <div className="mirc-icon">
+              <Route size={16} />
+            </div>
+            <div className="mirc-content">
+              <div className="mirc-top">
+                <span className="mirc-badge">INSPECTING ROUTE</span>
+                <span className="mirc-title">{inspectedRoute.name}</span>
+              </div>
+              <span className="mirc-sub">
+                {inspectedRoute.distance ? `${inspectedRoute.distance} • ` : ''}
+                {inspectedRoute.estTime ? `${inspectedRoute.estTime} • ` : ''}
+                {inspectedRoute.from.split(',')[0]} ➔ {inspectedRoute.to.split(',')[0]}
+                {loadingRouteGeometry ? ' (Tracing path…)' : ''}
+              </span>
+            </div>
+            {routePolyline.length > 0 && (
+              <button
+                type="button"
+                className="mirc-action-btn"
+                onClick={handleRefitRoute}
+                title="Fit full route in camera view"
+              >
+                <Maximize2 size={12} />
+                <span>Fit Route</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="mirc-action-btn"
+              onClick={() => setIsEditModalOpen(true)}
+              title="Edit route starting point, destination, or mode"
+            >
+              <Edit3 size={12} />
+              <span>Edit Route</span>
+            </button>
+            <button
+              type="button"
+              className="mirc-close-btn"
+              onClick={handleClearInspectedRoute}
+              title="Close route inspection view"
+            >
+              <X size={13} />
+              <span>Clear Route</span>
+            </button>
+          </div>
+        ) : selectedLocation.isCustom ? (
           <div className="map-floating-chip">
             <span>📍 Viewing: <b>{selectedLocation.label}</b></span>
             {deviceLocation && (
@@ -244,7 +424,7 @@ export default function LiveMap({
               </button>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* ── Top-Right: Map Action Toolbar (Show/Hide, Filters, Zoom) ── */}
         <div className="map-top-toolbar">
@@ -442,11 +622,91 @@ export default function LiveMap({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
 
-          {/* Dynamic map center controller */}
-          <MapController center={centerCoord} zoom={13} />
+          {/* Dynamic map center controller (disabled while inspecting a route to prevent snapping back to GPS) */}
+          <MapController center={centerCoord} zoom={13} disabled={Boolean(inspectedRoute)} />
+
+          {/* Automatic fit bounds controller (frames bounds once per route selection) */}
+          {routePolyline.length > 0 && (
+            <RouteBoundsController routePoints={routePolyline} routeId={inspectedRoute?.id} />
+          )}
 
           {/* Bridge to expose Leaflet map instance to outer toolbar */}
           <MapInstanceBridge onMapReady={setMapInstance} />
+
+          {/* ── Inspected Route Polylines (Highlighted with color & glow) ── */}
+          {routePolyline.length > 0 && (
+            <>
+              {/* Outer soft ambient indigo glow */}
+              <Polyline
+                positions={routePolyline}
+                pathOptions={{
+                  color: '#4f46e5',
+                  weight: 10,
+                  opacity: 0.35,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+              {/* Primary high-contrast navigation line in vibrant royal blue */}
+              <Polyline
+                positions={routePolyline}
+                pathOptions={{
+                  color: '#2563eb',
+                  weight: 5,
+                  opacity: 0.95,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+              {/* Inner directional navigation dash pulse */}
+              <Polyline
+                positions={routePolyline}
+                pathOptions={{
+                  color: '#93c5fd',
+                  weight: 2,
+                  opacity: 0.85,
+                  dashArray: '8, 12',
+                  lineCap: 'round',
+                }}
+              />
+            </>
+          )}
+
+          {/* Inspected Route Origin Marker (Point A) */}
+          {inspectedRoute?.fromCoords && (
+            <Marker
+              position={[inspectedRoute.fromCoords.lat, inspectedRoute.fromCoords.lng]}
+              icon={ROUTE_START_ICON}
+            >
+              <Popup>
+                <div className="osm-popup">
+                  <strong>🟢 Route Origin (Point A)</strong>
+                  <p>{inspectedRoute.from}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                    Commute Route: <b>{inspectedRoute.name}</b>
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
+          {/* Inspected Route Destination Marker (Point B) */}
+          {inspectedRoute?.toCoords && (
+            <Marker
+              position={[inspectedRoute.toCoords.lat, inspectedRoute.toCoords.lng]}
+              icon={ROUTE_END_ICON}
+            >
+              <Popup>
+                <div className="osm-popup">
+                  <strong>🔴 Route Destination (Point B)</strong>
+                  <p>{inspectedRoute.to}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                    Distance: <b>{inspectedRoute.distance || 'N/A'}</b> • Est: <b>{inspectedRoute.estTime || 'N/A'}</b>
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
 
           {/* Device location pin and accuracy circle if available */}
           {deviceLocation && (
@@ -589,6 +849,16 @@ export default function LiveMap({
           );
         })}
       </div>
+
+      {/* Edit Favorite Route Modal directly from Live Map */}
+      {isEditModalOpen && inspectedRoute && (
+        <AddFavoriteModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          itemToEdit={inspectedRoute}
+          defaultTab="route"
+        />
+      )}
     </div>
   );
 }

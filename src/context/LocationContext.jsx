@@ -127,109 +127,130 @@ export function LocationProvider({ children }) {
         return reject(new Error(errDesc));
       }
 
+      const onPosSuccess = async (pos) => {
+        locatingRef.current = false;
+        setIsLocating(false);
+        const { latitude, longitude, accuracy } = pos.coords;
+
+        setPermissionState('granted');
+        setLocationError(null);
+
+        // Reverse-geocode to get friendly locality name
+        let localityName = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+        try {
+          const rev = await reverseGeocode(latitude, longitude);
+          if (rev?.displayName) {
+            localityName = rev.locality || rev.city || rev.displayName.split(',')[0];
+          }
+        } catch {
+          // fallback
+        }
+
+        const devLoc = {
+          lat: latitude,
+          lng: longitude,
+          accuracy: accuracy || 0,
+          locality: localityName,
+          permissionState: 'granted',
+        };
+
+        setDeviceLocation(devLoc);
+
+        try {
+          sessionStorage.setItem('its_device_lat', String(latitude));
+          sessionStorage.setItem('its_device_lng', String(longitude));
+          sessionStorage.setItem('its_lat', String(latitude));
+          sessionStorage.setItem('its_lng', String(longitude));
+          sessionStorage.setItem('its_device_locality', localityName);
+        } catch {
+          // ignore
+        }
+
+        // If the user hasn't explicitly locked onto a custom search or if force is true,
+        // center the selected location on the new device location
+        setSelectedLocation((prev) => {
+          if (force || !prev.isCustom) {
+            sessionStorage.removeItem('its_selected_loc');
+            return {
+              lat: latitude,
+              lng: longitude,
+              label: localityName,
+              isCustom: false,
+            };
+          }
+          return prev;
+        });
+
+        syncLocationWithBackend(latitude, longitude);
+        resolve(devLoc);
+      };
+
+      const onPosError = (err) => {
+        locatingRef.current = false;
+        setIsLocating(false);
+        if (err.code === 1) {
+          // PERMISSION_DENIED
+          setPermissionState('denied');
+          setLocationError('Location permission denied. You can search for cities and localities manually in the search bar above.');
+        } else if (err.code === 2) {
+          // POSITION_UNAVAILABLE
+          setPermissionState('unavailable');
+          setLocationError('Device location is temporarily unavailable. Manual search remains fully functional.');
+        } else {
+          // TIMEOUT or unknown
+          setPermissionState('unavailable');
+          setLocationError('Location request timed out. Please try refreshing or search manually.');
+        }
+        reject(err);
+      };
+
+      // Attempt 1: High accuracy GNSS/hardware (timeout 5s)
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          locatingRef.current = false;
-          setIsLocating(false);
-          const { latitude, longitude, accuracy } = pos.coords;
-
-          setPermissionState('granted');
-          setLocationError(null);
-
-          // Reverse-geocode to get friendly locality name
-          let localityName = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          try {
-            const rev = await reverseGeocode(latitude, longitude);
-            if (rev?.displayName) {
-              localityName = rev.locality || rev.city || rev.displayName.split(',')[0];
-            }
-          } catch {
-            // fallback
-          }
-
-          const devLoc = {
-            lat: latitude,
-            lng: longitude,
-            accuracy: accuracy || 0,
-            locality: localityName,
-            permissionState: 'granted',
-          };
-
-          setDeviceLocation(devLoc);
-
-          try {
-            sessionStorage.setItem('its_device_lat', String(latitude));
-            sessionStorage.setItem('its_device_lng', String(longitude));
-            sessionStorage.setItem('its_lat', String(latitude));
-            sessionStorage.setItem('its_lng', String(longitude));
-            sessionStorage.setItem('its_device_locality', localityName);
-          } catch {
-            // ignore
-          }
-
-          // If the user hasn't explicitly locked onto a custom search or if force is true,
-          // center the selected location on the new device location
-          setSelectedLocation((prev) => {
-            if (force || !prev.isCustom) {
-              sessionStorage.removeItem('its_selected_loc');
-              return {
-                lat: latitude,
-                lng: longitude,
-                label: localityName,
-                isCustom: false,
-              };
-            }
-            return prev;
-          });
-
-          syncLocationWithBackend(latitude, longitude);
-          resolve(devLoc);
-        },
+        onPosSuccess,
         (err) => {
-          locatingRef.current = false;
-          setIsLocating(false);
           if (err.code === 1) {
-            // PERMISSION_DENIED
-            setPermissionState('denied');
-            setLocationError('Location permission denied. You can search for cities and localities manually in the search bar above.');
-          } else if (err.code === 2) {
-            // POSITION_UNAVAILABLE
-            setPermissionState('unavailable');
-            setLocationError('Device location is temporarily unavailable. Manual search remains fully functional.');
+            // Permission denied - do not retry
+            onPosError(err);
           } else {
-            // TIMEOUT or unknown
-            setPermissionState('unavailable');
-            setLocationError('Location request timed out. Please try refreshing or search manually.');
+            // Timeout or position unavailable - retry immediately with standard accuracy (Wi-Fi/cellular)
+            navigator.geolocation.getCurrentPosition(
+              onPosSuccess,
+              onPosError,
+              { timeout: 6000, maximumAge: 60000, enableHighAccuracy: false }
+            );
           }
-          reject(err);
         },
-        { timeout: 9000, maximumAge: 60000, enableHighAccuracy: true }
+        { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
       );
     });
   }, [deviceLocation, syncLocationWithBackend]);
 
-  // Check browser permission status if query API is supported
+  // Eagerly query and fetch real GPS location on mount
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
       navigator.permissions.query({ name: 'geolocation' }).then((status) => {
         setPermissionState(status.state);
+        // Automatically request real device location
+        requestDeviceLocation(false).catch(() => {});
         status.onchange = () => {
           setPermissionState(status.state);
           if (status.state === 'granted') {
-            requestDeviceLocation();
+            requestDeviceLocation(true).catch(() => {});
           }
         };
       }).catch(() => {
-        // Permissions query not supported for geolocation
+        requestDeviceLocation(false).catch(() => {});
       });
+    } else {
+      requestDeviceLocation(false).catch(() => {});
     }
   }, [requestDeviceLocation]);
 
-  // If already authenticated and cached location exists, immediately sync to database on mount
+  // If already authenticated and cached location exists, sync to database on mount
   useEffect(() => {
     if (isLoggedIn) {
-      const savedLat = parseFloat(sessionStorage.getItem('its_device_lat') || sessionStorage.getItem('its_lat') || '');
-      const savedLng = parseFloat(sessionStorage.getItem('its_device_lng') || sessionStorage.getItem('its_lng') || '');
+      const savedLat = parseFloat(sessionStorage.getItem('its_device_lat') || '');
+      const savedLng = parseFloat(sessionStorage.getItem('its_device_lng') || '');
       if (!isNaN(savedLat) && !isNaN(savedLng)) {
         syncLocationWithBackend(savedLat, savedLng);
       }
@@ -255,19 +276,10 @@ export function LocationProvider({ children }) {
     }
   }, [isLoggedIn, permissionState, requestDeviceLocation]);
 
-  // Continuously watch position & save to database when logged in
+  // Continuously watch position & track live GPS coordinates
   useEffect(() => {
     if (typeof window === 'undefined' || !navigator.geolocation) return;
 
-    if (!isLoggedIn) {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-      return;
-    }
-
-    // Continuous watchPosition to track live location & sync with database
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
@@ -294,18 +306,19 @@ export function LocationProvider({ children }) {
           return prev;
         });
 
-        const now = Date.now();
-        const last = lastSavedCoordsRef.current;
-        const timeElapsed = now - last.time;
-        const distMeters =
-          last.lat != null && last.lng != null
-            ? haversineMeters(last.lat, last.lng, latitude, longitude)
-            : 999999;
+        if (isLoggedIn) {
+          const now = Date.now();
+          const last = lastSavedCoordsRef.current;
+          const timeElapsed = now - last.time;
+          const distMeters =
+            last.lat != null && last.lng != null
+              ? haversineMeters(last.lat, last.lng, latitude, longitude)
+              : 999999;
 
-        // Continuously save to database on first callback, or if moved >= 10m, or every 20s
-        if (last.lat == null || distMeters >= 10 || timeElapsed >= 20000) {
-          lastSavedCoordsRef.current = { lat: latitude, lng: longitude, time: now };
-          syncLocationWithBackend(latitude, longitude);
+          if (last.lat == null || distMeters >= 10 || timeElapsed >= 20000) {
+            lastSavedCoordsRef.current = { lat: latitude, lng: longitude, time: now };
+            syncLocationWithBackend(latitude, longitude);
+          }
         }
       },
       (err) => {
@@ -354,9 +367,10 @@ export function LocationProvider({ children }) {
         label: deviceLocation.locality || `${deviceLocation.lat.toFixed(4)}, ${deviceLocation.lng.toFixed(4)}`,
         isCustom: false,
       });
-    } else {
-      requestDeviceLocation(true);
     }
+    requestDeviceLocation(true).catch(() => {
+      // error handled inside requestDeviceLocation
+    });
   }, [deviceLocation, requestDeviceLocation]);
 
   const clearLocationError = useCallback(() => {

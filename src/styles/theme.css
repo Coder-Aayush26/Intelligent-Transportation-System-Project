@@ -2,7 +2,7 @@
    ITS DESIGN SYSTEM — Light Theme
    Clean white base · vibrant blue/purple accents · soft shadows
 ---------------------------------------------------------------- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+/* Font loaded via index.html preconnect link to prevent render-blocking CSS imports */
 
 :root {
   /* ── Core Surfaces ─────────────────────────────────────────── */

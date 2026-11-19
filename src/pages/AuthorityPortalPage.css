@@ -891,23 +891,24 @@
   100% { opacity: 1; }
 }
 
-/* ── Timeout Setting Dropdown ── */
-.timeout-selector-wrap {
+/* ── Enforced Inactivity Policy Badge (Fixed 5 Min) ── */
+.auth-fixed-policy-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-right: 12px;
-}
-
-.timeout-select {
-  padding: 5px 8px;
-  border-radius: 6px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: #f8fafc;
   border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #0f172a;
+  color: #475569;
   font-size: 0.76rem;
   font-weight: 600;
-  outline: none;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.auth-fixed-policy-badge svg {
+  color: #64748b;
 }
 
 /* ── Fullscreen Inactivity Auto-Lock Overlay ── */

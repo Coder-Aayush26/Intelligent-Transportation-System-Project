@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useAppLocation } from '../../context/LocationContext';
 import { geocodeSearch } from '../../api/location';
+import { searchLandmarks } from '../../services/favoritesStorage';
 import { fetchNotifications } from '../../api/incidents';
 import UserAvatar from '../common/UserAvatar';
 import ConfirmModal from '../common/ConfirmModal';
@@ -92,6 +93,19 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
       return;
     }
 
+    // 0ms instant display of local surveyed Indore landmarks
+    const localMatches = searchLandmarks(clean).map((lm) => ({
+      displayName: `${lm.name}, Indore, Madhya Pradesh`,
+      lat: lm.coords.lat,
+      lng: lm.coords.lng,
+      type: lm.category || 'landmark',
+      importance: 1.0,
+    }));
+
+    if (localMatches.length > 0) {
+      setSuggestions(localMatches);
+    }
+
     setIsSearching(true);
     setSearchError('');
     setHighlightIndex(-1);
@@ -99,20 +113,36 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
     debounceTimerRef.current = setTimeout(async () => {
       abortControllerRef.current = new AbortController();
       try {
-        const results = await geocodeSearch(clean, abortControllerRef.current.signal);
-        setSuggestions(results);
-        if (results.length === 0) {
+        const results = await geocodeSearch(clean, {
+          signal: abortControllerRef.current.signal,
+          lat: deviceLocation?.lat,
+          lng: deviceLocation?.lng,
+        });
+        // Combine real geocoder results with surveyed matches and deduplicate
+        const combined = [...results, ...localMatches];
+        const seen = new Set();
+        const deduped = combined.filter((r) => {
+          const k = `${r.lat.toFixed(4)},${r.lng.toFixed(4)}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+        setSuggestions(deduped);
+        if (deduped.length === 0) {
           setSearchError(`No locations found for "${clean}"`);
         }
       } catch (err) {
         if (err?.name !== 'AbortError') {
-          setSearchError('Search request failed. Please check network.');
-          setSuggestions([]);
+          if (localMatches.length === 0) {
+            setSearchError('Search request failed. Please check network.');
+            setSuggestions([]);
+          }
         }
       } finally {
         setIsSearching(false);
       }
-    }, 380);
+    }, 350);
   }, []);
 
   const handleInputChange = (e) => {
@@ -159,17 +189,32 @@ export default function Topbar({ title = 'Search city, area, or landmark…' }) 
       } else if (suggestions.length > 0) {
         handleSelectSuggestion(suggestions[0]);
       } else if (query.trim().length >= 2) {
-        // Force immediate lookup and select first
-        geocodeSearch(query.trim())
+        setIsSearching(true);
+        geocodeSearch(query.trim(), {
+          lat: deviceLocation?.lat,
+          lng: deviceLocation?.lng,
+        })
           .then((results) => {
             if (results.length > 0) {
               handleSelectSuggestion(results[0]);
             } else {
-              setSearchError(`No locations found for "${query}"`);
+              const local = searchLandmarks(query.trim());
+              if (local.length > 0) {
+                handleSelectSuggestion({
+                  displayName: `${local[0].name}, Indore, Madhya Pradesh`,
+                  lat: local[0].coords.lat,
+                  lng: local[0].coords.lng,
+                });
+              } else {
+                setSearchError(`No locations found for "${query}"`);
+              }
             }
           })
           .catch(() => {
             setSearchError('Failed to search location.');
+          })
+          .finally(() => {
+            setIsSearching(false);
           });
       }
     }

@@ -94,9 +94,14 @@ export async function apiFetch(path, options = {}) {
         // continue to retry
       }
 
+      // 404 is an explicit Not Found — do not sleep and retry in loops
+      if (res.status === 404) {
+        break;
+      }
+
       // If server is starting up, wait briefly and retry
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 800 * attempt));
+        await new Promise((r) => setTimeout(r, 600 * attempt));
         continue;
       }
     }

@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, Map, Activity, Users, Radio, CheckCircle, Search, AlertCircle, Database, Lock, Share2 } from 'lucide-react';
+import { ShieldCheck, Map, Activity, Users, CheckCircle, Search, AlertCircle, Database, Lock, Share2 } from 'lucide-react';
 import Button from '../components/common/Button';
 import './LandingPage.css';
 function useParallax() {
   useEffect(() => {
     let raf;
-    const hero = document.querySelector('.hero-section');
     const content = document.querySelector('.hero-content');
     const visual  = document.querySelector('.hero-visual');
     const progressBar = document.querySelector('.scroll-progress-bar');

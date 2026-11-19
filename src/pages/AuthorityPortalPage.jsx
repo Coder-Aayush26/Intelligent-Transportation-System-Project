@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ShieldCheck, AlertTriangle, Truck, CheckCircle2, Clock, 
-  Filter, X, RefreshCw, Radio, UserCheck, Lock, Key, ArrowLeft,
-  ExternalLink, Building2, Shield, Eye, ShieldAlert, LogOut, ChevronDown
+  X, RefreshCw, UserCheck, Lock, Key, ArrowLeft,
+  ExternalLink, Building2, Shield, Eye, ShieldAlert, LogOut
 } from 'lucide-react';
 import { fetchAuthorityIncidents, updateIncidentResolution } from '../api/incidents';
-import { verifyAuthorityAccess, loginAuthorityApi } from '../api/users';
+import { verifyAuthorityAccess } from '../api/users';
 import { useRealtime } from '../context/RealtimeContext';
 import { useAuth } from '../context/AuthContext';
 import { useAppLocation } from '../context/LocationContext';
@@ -34,8 +34,8 @@ const COMMON_ACTIONS = [
 
 const VALID_PASSKEYS = ['ITS-OFFICIAL-2025', 'ADMIN2025', 'OFFICIAL123', 'MP-TRAFFIC-2025', 'INDORE-GOV'];
 
-// Inactivity timeout default: 5 minutes (300 seconds)
-const DEFAULT_TIMEOUT_SECONDS = 300;
+// Strict Inactivity timeout: Exactly 5 minutes (300 seconds). Non-configurable security policy.
+const INACTIVITY_TIMEOUT_SECONDS = 300;
 
 export default function AuthorityPortalPage() {
   const { user, loginAuthority, updateAuthUser, logout } = useAuth();
@@ -56,16 +56,14 @@ export default function AuthorityPortalPage() {
   // Clearance Gate & Login State
   const [officerIdentifier, setOfficerIdentifier] = useState('');
   const [passkeyInput, setPasskeyInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
   const [deptInput, setDeptInput] = useState('Indore Traffic Police Control Room');
   const [badgeInput, setBadgeInput] = useState('IND-TP-01');
   const [verifyingClearance, setVerifyingClearance] = useState(false);
   const [clearanceError, setClearanceError] = useState(null);
 
-  // Inactivity Auto-Lock State
+  // Inactivity Auto-Lock State (Locked at 5 min, no alteration permitted)
   const [isLocked, setIsLocked] = useState(false);
-  const [timeoutSetting, setTimeoutSetting] = useState(DEFAULT_TIMEOUT_SECONDS);
-  const [secondsRemaining, setSecondsRemaining] = useState(DEFAULT_TIMEOUT_SECONDS);
+  const [secondsRemaining, setSecondsRemaining] = useState(INACTIVITY_TIMEOUT_SECONDS);
   const [unlockPasskey, setUnlockPasskey] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
@@ -84,13 +82,13 @@ export default function AuthorityPortalPage() {
   const [modalNotes, setModalNotes] = useState('');
 
   // ──────────────────────────────────────────────────────────
-  // Inactivity Auto-Lock Protocol
+  // Inactivity Auto-Lock Protocol (Fixed 5 Minutes Policy)
   // ──────────────────────────────────────────────────────────
   const resetInactivity = useCallback(() => {
     if (!isLocked) {
-      setSecondsRemaining(timeoutSetting);
+      setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
     }
-  }, [isLocked, timeoutSetting]);
+  }, [isLocked]);
 
   useEffect(() => {
     if (!isAuthorized || isLocked) return;
@@ -129,7 +127,7 @@ export default function AuthorityPortalPage() {
       setIsLocked(false);
       setUnlockPasskey('');
       setUnlockError('');
-      setSecondsRemaining(timeoutSetting);
+      setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
     } else {
       setUnlockError('Invalid authorization passkey. Unlock clearance denied.');
     }
@@ -230,14 +228,14 @@ export default function AuthorityPortalPage() {
         const identifier = officerIdentifier.trim() || 'Officer_Control';
         await loginAuthority({
           identifier,
-          password: passwordInput.trim() || 'Official@2025',
+          password: 'Official@2025',
           passkey,
           department: deptInput,
           badgeNumber: badgeInput,
         });
       }
       setIsLocked(false);
-      setSecondsRemaining(timeoutSetting);
+      setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
     } catch (err) {
       setClearanceError(err.message || 'Invalid security passkey. Official administrative credentials required.');
     } finally {
@@ -536,22 +534,13 @@ export default function AuthorityPortalPage() {
             </div>
 
             <div className="toolbar-right">
-              <div className="timeout-selector-wrap">
-                <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>Auto-Lock:</span>
-                <select
-                  value={timeoutSetting}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setTimeoutSetting(val);
-                    setSecondsRemaining(val);
-                  }}
-                  className="timeout-select"
-                >
-                  <option value={180}>3 Minutes</option>
-                  <option value={300}>5 Minutes</option>
-                  <option value={600}>10 Minutes</option>
-                  <option value={900}>15 Minutes</option>
-                </select>
+              {/* Mandatory Auto-Lock Security Policy: 5 Min (Strictly Fixed) */}
+              <div 
+                className="auth-fixed-policy-badge" 
+                title="Mandatory Security Policy: Terminal auto-locks after exactly 5 minutes of inactivity. Duration cannot be changed."
+              >
+                <Lock size={12} />
+                <span>Auto-Lock: 5 Min (Fixed Policy)</span>
               </div>
 
               <button
@@ -691,8 +680,9 @@ export default function AuthorityPortalPage() {
               <span className="autolock-badge">TERMINAL LOCKED · SECURITY PROTOCOL</span>
               <h2>Console Locked Due to Inactivity</h2>
               <p>
-                To comply with municipal emergency command security standards, this console has locked 
-                itself automatically. Please enter your authorization passkey to resume dispatch operations.
+                In compliance with municipal emergency command security standards, this console has locked 
+                automatically after 5 minutes of inactivity. Duration is enforced by security policy and cannot be altered. 
+                Please enter your authorization passkey to resume dispatch operations.
               </p>
 
               <div className="autolock-officer-card">
