@@ -7,8 +7,11 @@ import './IncidentHeader.css';
 const TABS = ['Details', 'Reports', 'Media', 'Timeline', 'Verifications'];
 
 function getIncidentStatus(incident) {
-  if (incident.status === 'Resolved' || incident.status === 'expired') {
-    return { label: incident.status === 'Resolved' ? 'Resolved / Cleared' : 'Expired / Cleared', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669' };
+  if (incident.status === 'Resolved') {
+    return { label: 'Resolved / Cleared', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669' };
+  }
+  if (incident.status === 'expired') {
+    return { label: 'Expired', bg: 'rgba(148, 163, 184, 0.15)', color: '#64748b' };
   }
   const conf = incident.confidence ?? 50;
   if (conf >= 85) return { label: 'High Confidence', bg: 'var(--green-light)', color: 'var(--green)' };
@@ -25,7 +28,8 @@ export default function IncidentHeader({ incident }) {
 
   const reportsList = incident.reports || [];
   const reportCount = incident.reportCount || reportsList.length || 1;
-  const isExpired = incident.isActive === false || incident.status === 'expired';
+  const isResolved = incident.status === 'Resolved';
+  const isExpired = incident.status === 'expired' || (incident.isActive === false && !isResolved);
 
   const handleShare = () => {
     if (navigator.clipboard) {
@@ -40,9 +44,14 @@ export default function IncidentHeader({ incident }) {
 
   return (
     <div className="detail-card">
+      {isResolved && (
+        <div className="resolved-banner">
+          ✅ <b>Incident Resolved / Cleared:</b> This road disruption has been confirmed resolved{incident.resolved_by ? ` by ${incident.resolved_by}` : ''}. Historical reports and verification details are preserved below.
+        </div>
+      )}
       {isExpired && (
         <div className="expired-banner">
-          ⏱️ <b>Incident Expired / Resolved:</b> This road disruption has cleared or reached its active lifespan. Historical reports and verification details are preserved below.
+          ⏱️ <b>Incident Expired:</b> This road disruption has reached its active lifespan without recent confirmations. Historical reports and verification details are preserved below.
         </div>
       )}
 
@@ -60,7 +69,7 @@ export default function IncidentHeader({ incident }) {
           )}
         </div>
         <span className="badge-pill" style={{ background: statusTier.bg, color: statusTier.color }}>
-          {isExpired ? 'Expired' : statusTier.label}
+          {isResolved ? 'Resolved / Cleared' : isExpired ? 'Expired' : statusTier.label}
         </span>
       </div>
 

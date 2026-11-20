@@ -114,6 +114,18 @@
 }
 
 /* ── Expiry and Consolidation Badges ──────────────────────────── */
+.resolved-banner {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #059669;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
 .expired-banner {
   background: var(--red-light);
   border: 1px solid rgba(220, 38, 38, 0.25);

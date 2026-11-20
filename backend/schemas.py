@@ -229,13 +229,17 @@ class VerificationCreate(BaseModel):
 
 
 class VerificationOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
     incident_id: str
     verdict: str
     new_confidence: Optional[int] = None
     confirmations: Optional[int] = None
     contradictions: Optional[int] = None
+    resolutions: Optional[int] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+    isActive: Optional[bool] = None
 
 
 # ---------- User & Settings ----------

@@ -35,7 +35,8 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
   const [error, setError] = useState('');
 
   const reportCount = incident.reportCount || incident.reports?.length || 1;
-  const isExpired = incident.isActive === false || incident.status === 'expired';
+  const isResolved = incident?.status === 'Resolved';
+  const isExpired = incident?.status === 'expired' || (incident?.isActive === false && !isResolved);
 
   useEffect(() => {
     if (incident?.id) {
@@ -123,21 +124,28 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
       if (res && res.contradictions != null) {
         updated.contradictions = res.contradictions;
       }
-      if (verdict === 'resolve') {
-        updated.status = 'Resolved';
+      if (res && res.status != null) {
+        updated.status = res.status;
+        if (res.is_active !== undefined) {
+          updated.isActive = Boolean(res.is_active);
+        }
       }
 
       if (onIncidentUpdate) {
         onIncidentUpdate(updated);
       }
 
-      setFeedback(
-        verdict === 'confirm'
-          ? '✓ Confirmation registered! Confidence reinforced.'
-          : verdict === 'resolve'
-          ? '✓ Incident reported resolved by community response.'
-          : '✓ Contradiction recorded and factored into reliability score.'
-      );
+      if (verdict === 'resolve') {
+        if (res && res.status === 'Resolved') {
+          setFeedback('✓ Incident resolved and marked cleared!');
+        } else {
+          setFeedback('✓ Resolution vote recorded (Requires 3 community votes or official verification to clear).');
+        }
+      } else if (verdict === 'confirm') {
+        setFeedback('✓ Confirmation registered! Confidence reinforced.');
+      } else {
+        setFeedback('✓ Contradiction recorded and factored into reliability score.');
+      }
       setTimeout(() => setFeedback(''), 5000);
     } catch (err) {
       setError(err.message || 'Failed to submit verification. Please try again.');
@@ -145,8 +153,6 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
       setSubmitting(false);
     }
   };
-
-  const isResolved = incident?.status === 'Resolved';
 
   return (
     <div className="detail-card verif-summary-card">
@@ -217,12 +223,17 @@ export default function VerificationSummary({ incident, onIncidentUpdate }) {
           <b className="verif-val">≤ 1,000 metres</b>
         </div>
 
-        {isExpired && (
+        {isResolved ? (
           <div className="verif-row">
             <span className="verif-label">Lifecycle Status</span>
-            <span className="check-warn">⏱️ Expired / Auto-Resolved</span>
+            <span className="check-ok">✅ Resolved / Cleared</span>
           </div>
-        )}
+        ) : isExpired ? (
+          <div className="verif-row">
+            <span className="verif-label">Lifecycle Status</span>
+            <span className="check-warn">⏱️ Expired / Inactive</span>
+          </div>
+        ) : null}
       </div>
 
       {/* ── Community Verification Section with 2-Stage Gating ── */}

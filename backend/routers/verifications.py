@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..database import get_db
 from ..schemas import VerificationCreate, VerificationOut
-from ..auth import get_current_user_optional
+from ..auth import get_current_user_optional, is_authority_user
 from ..realtime import realtime_manager
 from ..services.confidence import compute_total_confidence
 from .incidents import haversine_distance_meters
@@ -67,7 +67,8 @@ async def verify_incident(
     user_id = str(current_user.get("_id", current_user.get("id", ""))) if current_user else (str(payload.user_id) if payload.user_id else None)
     user_name = current_user.get("name") if current_user else None
 
-    # Determine voter reliability
+    # Determine voter reliability and authority status
+    user_doc = None
     voter_reliability = 3.0
     if current_user and current_user.get("reliability_score") is not None:
         voter_reliability = float(current_user["reliability_score"])
@@ -75,6 +76,12 @@ async def verify_incident(
         user_doc = await db.users.find_one({"$or": [{"id": payload.user_id}, {"_id": payload.user_id}]})
         if user_doc and user_doc.get("reliability_score") is not None:
             voter_reliability = float(user_doc["reliability_score"])
+
+    is_authority = False
+    if current_user:
+        is_authority = is_authority_user(current_user)
+    elif user_doc:
+        is_authority = is_authority_user(user_doc)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -124,18 +131,56 @@ async def verify_incident(
         current_time=now,
     )
 
+    # Count community votes from all_verifs
+    confirmations = sum(1 for v in all_verifs if v.get("verdict") == "confirm")
+    contradictions = sum(1 for v in all_verifs if v.get("verdict") == "contradict")
+    resolve_votes = sum(1 for v in all_verifs if v.get("verdict") == "resolve")
+
+    # Consensus resolution criteria:
+    # - Official traffic authority or admin resolves immediately
+    # - Citizens require consensus: at least 3 resolve votes and resolve votes > confirmations
+    community_consensus_resolve = (resolve_votes >= 3 and resolve_votes > confirmations)
+
     incident_updates = {
         "confidence": new_conf,
         "last_activity_at": now,
     }
+
+    resolver_name = None
+    if current_user:
+        resolver_name = current_user.get("name") or current_user.get("full_name")
+
     if payload.verdict == "resolve":
-        incident_updates["status"] = "Resolved"
-        incident_updates["is_active"] = 0
+        if is_authority:
+            incident_updates["status"] = "Resolved"
+            incident_updates["is_active"] = 0
+            incident_updates["resolved_by"] = resolver_name or "Traffic Authority Officer"
+            incident_updates["resolved_at"] = now
+        elif community_consensus_resolve:
+            incident_updates["status"] = "Resolved"
+            incident_updates["is_active"] = 0
+            incident_updates["resolved_by"] = f"Community Consensus ({resolve_votes} Road Users)"
+            incident_updates["resolved_at"] = now
+        # Note: If single citizen votes "resolve" without quorum or authority,
+        # the vote is recorded in db.verifications, but incident status remains active.
+    elif payload.verdict == "confirm":
+        # If community previously marked it resolved, but new confirmations arrive that overturn the consensus
+        prev_resolver = str(inc.get("resolved_by") or "")
+        is_official_resolution = any(k in prev_resolver.lower() for k in ("traffic authority", "police", "official", "admin"))
+        if inc.get("status") == "Resolved" and not is_official_resolution and not is_authority:
+            if confirmations >= resolve_votes:
+                incident_updates["status"] = "Active"
+                incident_updates["is_active"] = 1
+                incident_updates["resolved_by"] = None
+                incident_updates["resolved_at"] = None
 
     await db.incidents.update_one(
         {"id": incident_id},
         {"$set": incident_updates}
     )
+
+    final_status = incident_updates.get("status", inc.get("status", "Active"))
+    final_is_active = incident_updates.get("is_active", inc.get("is_active", 1)) in (1, True)
 
     try:
         await realtime_manager.broadcast("incident_verified", {
@@ -144,7 +189,18 @@ async def verify_incident(
             "verifications": len(all_verifs),
             "nearbyVerifications": confirmations,
             "contradictions": contradictions,
+            "resolveVotes": resolve_votes,
+            "status": final_status,
+            "isActive": final_is_active,
         })
+        if final_status == "Resolved" and inc.get("status") != "Resolved":
+            await realtime_manager.broadcast("incident_resolved", {
+                "id": incident_id,
+                "status": "Resolved",
+                "isActive": False,
+                "resolvedBy": incident_updates.get("resolved_by", "Community Consensus"),
+                "resolvedAt": now.isoformat(),
+            })
     except Exception:
         pass
 
@@ -155,4 +211,8 @@ async def verify_incident(
         new_confidence=new_conf,
         confirmations=confirmations,
         contradictions=contradictions,
+        resolutions=resolve_votes,
+        status=final_status,
+        is_active=final_is_active,
+        isActive=final_is_active,
     )
