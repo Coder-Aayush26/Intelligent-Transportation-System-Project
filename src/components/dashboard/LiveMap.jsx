@@ -49,14 +49,39 @@ const SEARCHED_ICON = L.divIcon({
 /**
  * Controller inside MapContainer to smoothly navigate the map when
  * coordinates change (e.g. searching "vadodara" or acquiring device GPS).
+ * Prevents continuous flyTo thrashing and tile re-fetching on micro-jitter.
  */
-function MapController({ center, zoom = 13 }) {
+function MapController({ center, zoom = 13, isCustom = false }) {
   const map = useMap();
+  const lastCenterRef = useRef(null);
+  const wasCustomRef = useRef(isCustom);
+
   useEffect(() => {
-    if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-      map.flyTo(center, zoom, { duration: 1.0 });
+    if (!center || isNaN(center[0]) || isNaN(center[1])) return;
+
+    const [lat, lng] = center;
+    const last = lastCenterRef.current;
+
+    // Initial map setup
+    if (!last) {
+      lastCenterRef.current = [lat, lng];
+      wasCustomRef.current = isCustom;
+      map.setView([lat, lng], zoom);
+      return;
     }
-  }, [center, zoom, map]);
+
+    const customChanged = isCustom !== wasCustomRef.current;
+    wasCustomRef.current = isCustom;
+
+    const distMeters = getDistanceMeters(last[0], last[1], lat, lng);
+
+    // Only pan/fly if user explicitly searched a place, or moved significantly (>= 100 meters)
+    if (customChanged || isCustom || (distMeters != null && distMeters >= 100)) {
+      lastCenterRef.current = [lat, lng];
+      map.flyTo([lat, lng], zoom, { duration: 1.0 });
+    }
+  }, [center, zoom, map, isCustom]);
+
   return null;
 }
 
@@ -442,8 +467,8 @@ export default function LiveMap({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
 
-          {/* Dynamic map center controller */}
-          <MapController center={centerCoord} zoom={13} />
+          {/* Dynamic map center controller with anti-jitter protection */}
+          <MapController center={centerCoord} zoom={13} isCustom={selectedLocation.isCustom} />
 
           {/* Bridge to expose Leaflet map instance to outer toolbar */}
           <MapInstanceBridge onMapReady={setMapInstance} />

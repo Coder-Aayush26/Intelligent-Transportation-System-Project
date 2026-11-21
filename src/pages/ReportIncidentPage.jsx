@@ -1,11 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppLocation } from '../context/LocationContext';
 import ReportForm from '../components/report/ReportForm';
 import LocationPreview from '../components/report/LocationPreview';
 import './ReportIncidentPage.css';
 
 export default function ReportIncidentPage() {
-  const { selectedLocation, deviceLocation } = useAppLocation();
+  const { selectedLocation, deviceLocation, enableLiveTracking, requestDeviceLocation } = useAppLocation();
+
+  // Activate continuous high-accuracy live GPS tracking while user is reporting an incident
+  useEffect(() => {
+    enableLiveTracking?.(true);
+    requestDeviceLocation?.(true).catch(() => {});
+    return () => {
+      enableLiveTracking?.(false);
+    };
+  }, [enableLiveTracking, requestDeviceLocation]);
 
   // Lifted location state updated by ReportForm
   const [activeLocation, setActiveLocation] = useState(null);

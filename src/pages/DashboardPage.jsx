@@ -107,6 +107,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    // Background safety sync every 5 minutes (300,000ms); WebSocket handles real-time events
+    const interval = setInterval(() => {
+      loadData();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [loadData]);
 
   // Live streaming subscription: stream incidents into the dashboard in real-time

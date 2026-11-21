@@ -29,6 +29,8 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
 export function LocationProvider({ children }) {
   const { user, isLoggedIn } = useAuth();
   const watchIdRef = useRef(null);
+  const isLiveTrackingRef = useRef(false);
+  const lastStateCoordsRef = useRef({ lat: null, lng: null, time: 0 });
   const lastSavedCoordsRef = useRef({ lat: null, lng: null, time: 0 });
   const [deviceLocation, setDeviceLocation] = useState(() => {
     try {
@@ -267,34 +269,55 @@ export function LocationProvider({ children }) {
       return;
     }
 
-    // Continuous watchPosition to track live location & sync with database
+    // Continuous watchPosition with smart displacement filtering and mode switching
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         setPermissionState('granted');
         setLocationError(null);
 
-        setDeviceLocation((prev) => ({
-          ...(prev || {}),
-          lat: latitude,
-          lng: longitude,
-          accuracy: accuracy || 0,
-          permissionState: 'granted',
-        }));
-
-        setSelectedLocation((prev) => {
-          if (!prev || !prev.isCustom) {
-            return {
-              ...(prev || {}),
-              lat: latitude,
-              lng: longitude,
-              isCustom: false,
-            };
-          }
-          return prev;
-        });
-
         const now = Date.now();
+        const lastState = lastStateCoordsRef.current;
+        const timeSinceState = now - lastState.time;
+        const distFromLastState =
+          lastState.lat != null && lastState.lng != null
+            ? haversineMeters(lastState.lat, lastState.lng, latitude, longitude)
+            : 999999;
+
+        // When live tracking is enabled (e.g. actively on Report Incident page):
+        //   update state on any movement >= 3m or if 3s elapsed.
+        // In standard mode (browsing Live Map, Nearby Incidents, Analytics):
+        //   filter out sensor noise; only re-render if user moved >= 50m, or every 5 mins.
+        const shouldUpdateState =
+          lastState.lat == null ||
+          isLiveTrackingRef.current ||
+          distFromLastState >= 50 ||
+          timeSinceState >= 300000;
+
+        if (shouldUpdateState) {
+          lastStateCoordsRef.current = { lat: latitude, lng: longitude, time: now };
+
+          setDeviceLocation((prev) => ({
+            ...(prev || {}),
+            lat: latitude,
+            lng: longitude,
+            accuracy: accuracy || 0,
+            permissionState: 'granted',
+          }));
+
+          setSelectedLocation((prev) => {
+            if (!prev || !prev.isCustom) {
+              return {
+                ...(prev || {}),
+                lat: latitude,
+                lng: longitude,
+                isCustom: false,
+              };
+            }
+            return prev;
+          });
+        }
+
         const last = lastSavedCoordsRef.current;
         const timeElapsed = now - last.time;
         const distMeters =
@@ -302,8 +325,8 @@ export function LocationProvider({ children }) {
             ? haversineMeters(last.lat, last.lng, latitude, longitude)
             : 999999;
 
-        // Continuously save to database on first callback, or if moved >= 10m, or every 20s
-        if (last.lat == null || distMeters >= 10 || timeElapsed >= 20000) {
+        // Save to database only on first acquisition, or if moved >= 50m, or every 5 mins (300s)
+        if (last.lat == null || distMeters >= 50 || timeElapsed >= 300000) {
           lastSavedCoordsRef.current = { lat: latitude, lng: longitude, time: now };
           syncLocationWithBackend(latitude, longitude);
         }
@@ -363,6 +386,15 @@ export function LocationProvider({ children }) {
     setLocationError(null);
   }, []);
 
+  const enableLiveTracking = useCallback((enable = true) => {
+    isLiveTrackingRef.current = Boolean(enable);
+    if (enable) {
+      // Clear last cached state so next GPS tick instantly propagates to the UI
+      lastStateCoordsRef.current = { lat: null, lng: null, time: 0 };
+      requestDeviceLocation(true).catch(() => {});
+    }
+  }, [requestDeviceLocation]);
+
   const value = {
     deviceLocation,
     selectedLocation,
@@ -376,6 +408,7 @@ export function LocationProvider({ children }) {
     selectLocation,
     resetToDeviceLocation,
     clearLocationError,
+    enableLiveTracking,
   };
 
   return (

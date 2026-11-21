@@ -57,14 +57,36 @@ const SEARCHED_ICON = L.divIcon({
   popupAnchor: [0, -24],
 });
 
-/** Keeps the map smoothly updated when coordinates change */
-function MapController({ center, zoom = 13 }) {
+/** Keeps the map smoothly updated when coordinates change without jitter */
+function MapController({ center, zoom = 13, isCustom = false }) {
   const map = useMap();
+  const lastCenterRef = useRef(null);
+  const wasCustomRef = useRef(isCustom);
+
   useEffect(() => {
-    if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-      map.flyTo(center, zoom, { duration: 1.0 });
+    if (!center || isNaN(center[0]) || isNaN(center[1])) return;
+
+    const [lat, lng] = center;
+    const last = lastCenterRef.current;
+
+    if (!last) {
+      lastCenterRef.current = [lat, lng];
+      wasCustomRef.current = isCustom;
+      map.setView([lat, lng], zoom);
+      return;
     }
-  }, [center, zoom, map]);
+
+    const customChanged = isCustom !== wasCustomRef.current;
+    wasCustomRef.current = isCustom;
+
+    const distMeters = getDistanceMeters(last[0], last[1], lat, lng);
+
+    if (customChanged || isCustom || (distMeters != null && distMeters >= 100)) {
+      lastCenterRef.current = [lat, lng];
+      map.flyTo([lat, lng], zoom, { duration: 1.0 });
+    }
+  }, [center, zoom, map, isCustom]);
+
   return null;
 }
 
@@ -117,12 +139,48 @@ export default function NearbyIncidentsPage() {
     }
   }, []);
 
-  // Fetch incidents whenever active coordinates change
+  const lastFetchedRef = useRef({ lat: null, lng: null, time: 0, isCustom: false });
+
+  // Fetch incidents: on initial load, when custom location changes,
+  // or when user moved >= 500m, or every 5 minutes (300,000ms)
   useEffect(() => {
-    loadIncidents(activeLat, activeLng);
-  }, [loadIncidents, activeLat, activeLng]);
+    if (activeLat == null || activeLng == null || isNaN(activeLat) || isNaN(activeLng)) return;
+
+    const now = Date.now();
+    const last = lastFetchedRef.current;
+    const timeSinceLast = now - last.time;
+    const customChanged = isCustomLoc !== last.isCustom;
+    const distMeters =
+      last.lat != null && last.lng != null
+        ? getDistanceMeters(last.lat, last.lng, activeLat, activeLng)
+        : 999999;
+
+    const shouldFetch =
+      last.lat == null ||
+      customChanged ||
+      isCustomLoc ||
+      (distMeters != null && distMeters >= 500) ||
+      timeSinceLast >= 300000;
+
+    if (shouldFetch) {
+      lastFetchedRef.current = { lat: activeLat, lng: activeLng, time: now, isCustom: isCustomLoc };
+      loadIncidents(activeLat, activeLng);
+    }
+  }, [loadIncidents, activeLat, activeLng, isCustomLoc]);
+
+  // Periodic 5-minute background refresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (activeLat != null && activeLng != null) {
+        lastFetchedRef.current = { lat: activeLat, lng: activeLng, time: Date.now(), isCustom: isCustomLoc };
+        loadIncidents(activeLat, activeLng);
+      }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [loadIncidents, activeLat, activeLng, isCustomLoc]);
 
   const handleRefreshLocation = () => {
+    lastFetchedRef.current = { lat: null, lng: null, time: 0, isCustom: false };
     requestDeviceLocation(true);
   };
 
@@ -197,7 +255,8 @@ export default function NearbyIncidentsPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
 
-          <MapController center={centerCoord} zoom={13} />
+          {/* Dynamic map center controller with anti-jitter protection */}
+          <MapController center={centerCoord} zoom={13} isCustom={isCustomLoc} />
 
           {/* User location marker or Searched center marker */}
           <Marker
